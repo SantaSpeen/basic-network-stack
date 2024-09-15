@@ -5,7 +5,8 @@ import queue
 import socket
 import threading
 import time
-import traceback
+
+from loguru import logger
 
 from .listener import *
 
@@ -240,6 +241,20 @@ class DHCPServerConfiguration(object):
 
     debug = lambda *args, **kw: None
 
+    def __init__(self, config=None):
+        if config:
+            _ba = config.get('bind', self.bind_address)
+            if _ba == "all":
+                _ba = '0.0.0.0'
+            self.bind_address = _ba
+            self.network = config.get('network', self.network)
+            self.broadcast_address = config.get('broadcast', self.broadcast_address)
+            self.subnet_mask = config.get('netmask', self.subnet_mask)
+            self.router = config.get('router', self.router)
+            self.ip_address_lease_time = config.get('lease_time', self.ip_address_lease_time)
+            self.domain_name_server = config.get('dns_servers', self.domain_name_server)
+            self.host_file = config.get('host_file', self.host_file)
+
     def load(self, file):
         with open(file) as f:
             exec(f.read(), self.__dict__)
@@ -252,9 +267,6 @@ class DHCPServerConfiguration(object):
                 self.domain_name_server = [ip]
                 self.network = '.'.join(ip.split('.')[:-1] + ['0'])
                 self.broadcast_address = '.'.join(ip.split('.')[:-1] + ['255'])
-                # self.ip_forwarding_enabled = True
-                # self.non_local_source_routing_enabled = True
-                # self.perform_mask_discovery = True
 
     def all_ip_addresses(self):
         ips = ip_addresses(self.network, self.subnet_mask)
@@ -423,9 +435,9 @@ class DHCPServer(object):
 
     def __init__(self, configuration: DHCPServerConfiguration = None):
         self.configuration = configuration or DHCPServerConfiguration()
-        print('DHCP server configuration:\n'
-              f'Network: {configuration.network} {configuration.subnet_mask}\n'
-              f'Additional: Router: {configuration.router}, DNS: {configuration.domain_name_server}, Lease time: {configuration.ip_address_lease_time} seconds')
+        logger.info('DHCP server configuration')
+        logger.info(f'Network: {configuration.network} {configuration.subnet_mask}')
+        logger.info(f'Additional: Router: {configuration.router}, DNS: {configuration.domain_name_server}, Lease time: {configuration.ip_address_lease_time} seconds')
         self.socket = socket(type=SOCK_DGRAM)
         self.socket.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
         self.socket.bind((self.configuration.bind_address, 67))
@@ -535,14 +547,14 @@ class DHCPServer(object):
                 broadcast_socket.close()
 
     def run(self):
+        logger.success("DHCP server started")
         while not self.closed:
             try:
                 self.update(1)
             except KeyboardInterrupt:
                 break
             except Exception as e:
-                print(f"Error: {e}")
-                traceback.print_exc()
+                logger.exception(e)
 
     def run_in_thread(self):
         thread = threading.Thread(target=self.run)
