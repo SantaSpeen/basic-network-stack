@@ -13,14 +13,14 @@ from loguru import logger
 from .listener import *
 
 def get_interface_ip(interface_name):
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock = socket(AF_INET, SOCK_DGRAM)
     try:
         ip = fcntl.ioctl(
             sock.fileno(),
             0x8915,  # SIOCGIFADDR
             struct.pack('256s', interface_name[:15].encode('utf-8'))
         )[20:24]
-        return socket.inet_ntoa(ip)
+        return inet_ntoa(ip)
     except OSError as e:
         logger.error(f"Error getting IP for interface {interface_name}: {e}")
         exit(1)
