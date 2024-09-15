@@ -49,13 +49,13 @@ class Config:
             with open(self._file, "w", encoding="utf-8") as f:
                 f.write(textwrap.dedent("""\
                     dhcp:
-                        bind: all
+                        bind: eth0
                         network: 10.0.0.0
                         netmask: 255.255.255.0
                         router: 10.0.0.1
-                        dns_servers: ["8.8.8.8", "8.8.4.4"]
+                        dns_servers: [8.8.8.8, 8.8.4.4]
                         lease_time: 300
-                        broadcast: 255.255.255.255
+                        broadcast: 10.0.0.255
                         server_addresses: [10.0.0.1]
                         hosts_file: hosts.csv
                         
@@ -67,4 +67,4 @@ class Config:
                       admin: null  # tg_id of admin user (or list of ids)
                     """))
             logger.success(f"Config file generated. File: '{self._file}'")
-            exit(1)
+            return self._load()

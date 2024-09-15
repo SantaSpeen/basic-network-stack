@@ -5,10 +5,25 @@ import queue
 import socket
 import threading
 import time
+import fcntl
+from ipaddress import ip_address
 
 from loguru import logger
 
 from .listener import *
+
+def get_interface_ip(interface_name):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        ip = fcntl.ioctl(
+            sock.fileno(),
+            0x8915,  # SIOCGIFADDR
+            struct.pack('256s', interface_name[:15].encode('utf-8'))
+        )[20:24]
+        return socket.inet_ntoa(ip)
+    except OSError as e:
+        logger.error(f"Error getting IP for interface {interface_name}: {e}")
+        exit(1)
 
 
 class WriteBootProtocolPacket(object):
@@ -244,6 +259,12 @@ class DHCPServerConfiguration(object):
             _ba = config.get('bind', self.bind_address)
             if _ba == "all":
                 _ba = '0.0.0.0'
+            try:
+                ip_address(_ba)
+            except ValueError:
+                __ba = _ba
+                _ba = get_interface_ip(_ba)
+                logger.info(f"Using interface {__ba} ({_ba})")
             self.bind_address = _ba
             self.network = config.get('network', self.network)
             self.broadcast_address = config.get('broadcast', self.broadcast_address)
@@ -425,9 +446,9 @@ class DHCPServer(object):
 
     def __init__(self, configuration: DHCPServerConfiguration = None):
         self.configuration = configuration or DHCPServerConfiguration()
-        logger.info('DHCP server configuration')
+        logger.info(f'DHCP server {tuple(configuration.server_addresses)!r} configuration')
         logger.info(f'Network: {configuration.network} {configuration.subnet_mask}')
-        logger.info(f'Additional: Router: {configuration.router}, DNS: {configuration.domain_name_server}, Lease time: {configuration.ip_address_lease_time} seconds')
+        logger.info(f'Options: gw: {configuration.router}, dns: {configuration.domain_name_server}, lease: {configuration.ip_address_lease_time}s')
         self.socket = socket(type=SOCK_DGRAM)
         self.socket.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
         self.socket.bind((self.configuration.bind_address, 67))
