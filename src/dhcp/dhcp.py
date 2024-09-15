@@ -5,7 +5,6 @@ import queue
 import socket
 import threading
 import time
-import fcntl
 from ipaddress import ip_address
 
 from loguru import logger
@@ -13,6 +12,12 @@ from loguru import logger
 from .listener import *
 
 def get_interface_ip(interface_name):
+    try:
+        import fcntl
+    except ImportError:
+        logger.error("Windwos moment...")
+        logger.info("Just use 'bind: all'")
+        exit(1)
     sock = socket(AF_INET, SOCK_DGRAM)
     try:
         ip = fcntl.ioctl(
@@ -555,12 +560,13 @@ class DHCPServer(object):
                 broadcast_socket.close()
 
     def run(self):
-        logger.success("DHCP server started")
+        logger.success("[DHCP] Server started")
         while not self.closed:
             try:
                 self.update(1)
             except KeyboardInterrupt:
-                break
+                self.close()
+                logger.success("[DHCP] Closed")
             except Exception as e:
                 logger.exception(e)
 

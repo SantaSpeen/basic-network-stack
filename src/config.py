@@ -49,7 +49,7 @@ class Config:
             with open(self._file, "w", encoding="utf-8") as f:
                 f.write(textwrap.dedent("""\
                     dhcp:
-                        bind: eth0
+                        bind: all
                         network: 10.0.0.0
                         netmask: 255.255.255.0
                         router: 10.0.0.1
