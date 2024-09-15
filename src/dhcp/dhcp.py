@@ -193,7 +193,7 @@ class Transaction(object):
 
     def received_dhcp_discover(self, discovery):
         if self.is_done(): return
-        self.configuration.debug('discover:\n {}'.format(str(discovery).replace('\n', '\n\t')))
+        self.configuration.debug('discover:\n {}'.format(str(discovery).replace('\n', '\n  ')))
         self.send_offer(discovery)
 
     def send_offer(self, discovery):
@@ -240,8 +240,8 @@ class Transaction(object):
 
 
 class DHCPServerConfiguration(object):
-    dhcp_offer_after_seconds = 10
-    dhcp_acknowledge_after_seconds = 10
+    dhcp_offer_after_seconds = 1
+    dhcp_acknowledge_after_seconds = 1
     length_of_transaction = 40
 
     bind_address = ''
