@@ -489,19 +489,6 @@ class DHCPServer(object):
                 transaction.close()
                 self.transactions.pop(transaction_id)
 
-    def received(self, packet):
-        if not self.transactions[packet.transaction_id].receive(packet):
-            self.configuration.debug('received:\n {}'.format(str(packet).replace('\n', '\n  ')))
-
-    def client_has_chosen(self, packet):
-        # self.configuration.debug('client_has_chosen:\n {}'.format(str(packet).replace('\n', '\n  ')))
-        _readed = ReadBootProtocolPacket(packet.to_bytes())
-        logger.info(f"[DHCP] client_has_chosen: {_readed.named_options['dhcp_message_type']}; {'srv <- cli' if _readed.message_type == 1 else 'srv -> cli'}; MAC: {_readed.client_mac_address}")
-        host = Host.from_packet(packet)
-        if not host.has_valid_ip():
-            return
-        self.hosts.replace(host)
-
     def is_valid_client_address(self, address):
         if address is None:
             return False
@@ -545,11 +532,22 @@ class DHCPServer(object):
             self.hosts.replace(Host(mac_address, ip, packet.host_name or '', time.time()))
         return ip
 
+    def received(self, packet):
+        if not self.transactions[packet.transaction_id].receive(packet):
+            # self.configuration.debug('received:\n {}'.format(str(packet).replace('\n', '\n  ')))
+            logger.info(f"[DHCP] client_has_chosen: {packet.named_options['dhcp_message_type']}; {'srv <- cli' if packet.message_type == 1 else 'srv -> cli'}; MAC: {_readed.client_mac_address}")
+        
+    def client_has_chosen(self, packet):
+        # self.configuration.debug('client_has_chosen:\n {}'.format(str(packet).replace('\n', '\n  ')))
+        logger.info(f"[DHCP] client_has_chosen: {packet.named_options['dhcp_message_type']}; {'srv <- cli' if packet.message_type == 1 else 'srv -> cli'}; MAC: {_readed.client_mac_address}")
+        host = Host.from_packet(packet)
+        if not host.has_valid_ip():
+            return
+        self.hosts.replace(host)
 
     def broadcast(self, packet):
         # self.configuration.debug('broadcasting:\n {}'.format(str(packet).replace('\n', '\n  ')))
-        _readed = ReadBootProtocolPacket(packet.to_bytes())
-        logger.info(f"[DHCP] broadcasting: {_readed.named_options['dhcp_message_type']}; {'srv <- cli' if _readed.message_type == 1 else 'srv -> cli'}; MAC: {_readed.client_mac_address}")
+        logger.info(f"[DHCP] broadcasting: {packet.named_options['dhcp_message_type']}; {'srv <- cli' if packet.message_type == 1 else 'srv -> cli'}; MAC: {packet.client_mac_address}")
         for addr in self.configuration.server_addresses:
             broadcast_socket = socket(type=SOCK_DGRAM)
             broadcast_socket.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
