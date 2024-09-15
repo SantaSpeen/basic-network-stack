@@ -446,7 +446,7 @@ class DHCPServer(object):
 
     def __init__(self, configuration: DHCPServerConfiguration = None):
         self.configuration = configuration or DHCPServerConfiguration()
-        logger.info(f'DHCP server {tuple(configuration.server_addresses)!r} configuration')
+        logger.info(f'DHCP server ({configuration.server_addresses}) configuration')
         logger.info(f'Network: {configuration.network} {configuration.subnet_mask}')
         logger.info(f'Options: gw: {configuration.router}, dns: {configuration.domain_name_server}, lease: {configuration.ip_address_lease_time}s')
         self.socket = socket(type=SOCK_DGRAM)
