@@ -165,8 +165,6 @@ class ReadBootProtocolPacket(object):
         self.host = address[0]
         self.port = address[1]
 
-        # wireshark = wikipedia = data[...]
-
         self.message_type = self.OP = data[0]
         self.hardware_type = self.HTYPE = data[1]
         self.hardware_address_length = self.HLEN = data[2]

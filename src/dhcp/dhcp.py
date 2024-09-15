@@ -193,7 +193,8 @@ class Transaction(object):
 
     def received_dhcp_discover(self, discovery):
         if self.is_done(): return
-        self.configuration.debug('discover:\n {}'.format(str(discovery).replace('\n', '\n  ')))
+        # self.configuration.debug('discover:\n {}'.format(str(discovery).replace('\n', '\n  ')))
+        logger.info(f"[DHCP] DHCPDISCOVER; {'srv <- cli' if discovery.message_type == 1 else 'srv -> cli'}; MAC: {discovery.client_mac_address}")
         self.send_offer(discovery)
 
     def send_offer(self, discovery):
@@ -493,7 +494,9 @@ class DHCPServer(object):
             self.configuration.debug('received:\n {}'.format(str(packet).replace('\n', '\n  ')))
 
     def client_has_chosen(self, packet):
-        self.configuration.debug('client_has_chosen:\n {}'.format(str(packet).replace('\n', '\n  ')))
+        # self.configuration.debug('client_has_chosen:\n {}'.format(str(packet).replace('\n', '\n  ')))
+        _readed = ReadBootProtocolPacket(packet.to_bytes())
+        logger.info(f"[DHCP] client_has_chosen: {_readed.named_options['dhcp_message_type']}; {'srv <- cli' if _readed.message_type == 1 else 'srv -> cli'}; MAC: {_readed.client_mac_address}")
         host = Host.from_packet(packet)
         if not host.has_valid_ip():
             return
@@ -518,11 +521,11 @@ class DHCPServer(object):
             for host in known_hosts:
                 if self.is_valid_client_address(host.ip):
                     ip = host.ip
-            logger.info(f'[DHCP] Known device, IP: {ip}')
+            logger.info(f'[DHCP] Known device. MAC: {mac_address}; IP: {ip}')
         if ip is None and self.is_valid_client_address(requested_ip_address) and ip not in assigned_addresses:
             # 2. choose valid requested ip address
             ip = requested_ip_address
-            logger.info(f'[DHCP] Requested IP: {ip}')
+            logger.info(f'[DHCP] New device; Requested IP: {ip}. MAC: {mac_address}')
         if ip is None:
             # 3. choose new, free ip address
             chosen = False
@@ -536,7 +539,7 @@ class DHCPServer(object):
                 network_hosts.sort(key=lambda host: host.last_used)
                 ip = network_hosts[0].ip
                 assert self.is_valid_client_address(ip)
-            logger.info(f'[DHCP] New device')
+            logger.info(f'[DHCP] New device. MAC: {mac_address}')
         if not any([host.ip == ip for host in known_hosts]):
             logger.success(f'[DHCP] Device registered. MAC: {mac_address}; IP: {ip}; HostName: {packet.host_name}')
             self.hosts.replace(Host(mac_address, ip, packet.host_name or '', time.time()))
@@ -544,7 +547,9 @@ class DHCPServer(object):
 
 
     def broadcast(self, packet):
-        self.configuration.debug('broadcasting:\n {}'.format(str(packet).replace('\n', '\n  ')))
+        # self.configuration.debug('broadcasting:\n {}'.format(str(packet).replace('\n', '\n  ')))
+        _readed = ReadBootProtocolPacket(packet.to_bytes())
+        logger.info(f"[DHCP] broadcasting: {_readed.named_options['dhcp_message_type']}; {'srv <- cli' if _readed.message_type == 1 else 'srv -> cli'}; MAC: {_readed.client_mac_address}")
         for addr in self.configuration.server_addresses:
             broadcast_socket = socket(type=SOCK_DGRAM)
             broadcast_socket.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
