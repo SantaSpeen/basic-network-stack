@@ -56,10 +56,11 @@ class Config:
                         dns_servers: ["8.8.8.8", "8.8.4.4"]
                         lease_time: 300
                         broadcast: 255.255.255.255
+                        server_addresses: [10.0.0.1]
                         hosts_file: hosts.csv
                         
                     doh:
-                        enabled: false  # VIP
+                        enabled: false  # WIP
                                             
                     telegram:
                       token: null # Bot token
