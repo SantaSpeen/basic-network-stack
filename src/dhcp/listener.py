@@ -15,6 +15,8 @@ def inet_ntoaX(data):
 
 
 def inet_atonX(ips):
+    if isinstance(ips, str):
+        ips = [ips]
     return b''.join(map(inet_aton, ips))
 
 
