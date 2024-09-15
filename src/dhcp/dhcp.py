@@ -11,12 +11,8 @@ from loguru import logger
 from .listener import *
 
 
-def get_host_ip_addresses():
-    return gethostbyname_ex(gethostname())[2]
-
-
 class WriteBootProtocolPacket(object):
-    message_type = 2  # 1 for client -> server 2 for server -> client
+    message_type = 2  # 1 client -> server; 2 server -> client
     hardware_type = 1
     hardware_address_length = 6
     hops = 0
@@ -237,6 +233,8 @@ class DHCPServerConfiguration(object):
     ip_address_lease_time = 300  # seconds
     domain_name_server = ["8.8.8.8", "8.8.4.4"]  # list of ips
 
+    server_addresses = gethostbyname_ex(gethostname())[2]
+
     host_file = 'hosts.csv'
 
     debug = lambda *args, **kw: None
@@ -253,20 +251,12 @@ class DHCPServerConfiguration(object):
             self.router = config.get('router', self.router)
             self.ip_address_lease_time = config.get('lease_time', self.ip_address_lease_time)
             self.domain_name_server = config.get('dns_servers', self.domain_name_server)
+            self.server_addresses = config.get('server_addresses', self.server_addresses)
             self.host_file = config.get('host_file', self.host_file)
 
     def load(self, file):
         with open(file) as f:
             exec(f.read(), self.__dict__)
-
-    def adjust_if_this_computer_is_a_router(self):
-        ip_addresses = get_host_ip_addresses()
-        for ip in reversed(ip_addresses):
-            if ip.split('.')[-1] == '1':
-                self.router = [ip]
-                self.domain_name_server = [ip]
-                self.network = '.'.join(ip.split('.')[:-1] + ['0'])
-                self.broadcast_address = '.'.join(ip.split('.')[:-1] + ['255'])
 
     def all_ip_addresses(self):
         ips = ip_addresses(self.network, self.subnet_mask)
@@ -527,13 +517,10 @@ class DHCPServer(object):
             self.hosts.replace(Host(mac_address, ip, packet.host_name or '', time.time()))
         return ip
 
-    @property
-    def server_identifiers(self):
-        return get_host_ip_addresses()
 
     def broadcast(self, packet):
-        self.configuration.debug('broadcasting:\n {}'.format(str(packet).replace('\n', '\n\t')))
-        for addr in self.server_identifiers:
+        self.configuration.debug('broadcasting:\n {}'.format(str(packet).replace('\n', '\n  ')))
+        for addr in self.configuration.server_addresses:
             broadcast_socket = socket(type=SOCK_DGRAM)
             broadcast_socket.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
             broadcast_socket.setsockopt(SOL_SOCKET, SO_BROADCAST, 1)
