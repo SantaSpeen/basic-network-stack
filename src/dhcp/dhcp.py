@@ -86,7 +86,6 @@ class WriteBootProtocolPacket(object):
         if self.options:
             for option in self.options:
                 value = self.get_option(option)
-                # print(option, value)
                 if value is None:
                     continue
                 result += bytes([option, len(value)]) + value
@@ -491,10 +490,10 @@ class DHCPServer(object):
 
     def received(self, packet):
         if not self.transactions[packet.transaction_id].receive(packet):
-            self.configuration.debug('received:\n {}'.format(str(packet).replace('\n', '\n\t')))
+            self.configuration.debug('received:\n {}'.format(str(packet).replace('\n', '\n  ')))
 
     def client_has_chosen(self, packet):
-        self.configuration.debug('client_has_chosen:\n {}'.format(str(packet).replace('\n', '\n\t')))
+        self.configuration.debug('client_has_chosen:\n {}'.format(str(packet).replace('\n', '\n  ')))
         host = Host.from_packet(packet)
         if not host.has_valid_ip():
             return
@@ -519,11 +518,11 @@ class DHCPServer(object):
             for host in known_hosts:
                 if self.is_valid_client_address(host.ip):
                     ip = host.ip
-            print('known ip:', ip)
+            logger.info(f'[DHCP] Known device, IP: {ip}')
         if ip is None and self.is_valid_client_address(requested_ip_address) and ip not in assigned_addresses:
             # 2. choose valid requested ip address
             ip = requested_ip_address
-            print('valid ip:', ip)
+            logger.info(f'[DHCP] Requested IP: {ip}')
         if ip is None:
             # 3. choose new, free ip address
             chosen = False
@@ -537,9 +536,9 @@ class DHCPServer(object):
                 network_hosts.sort(key=lambda host: host.last_used)
                 ip = network_hosts[0].ip
                 assert self.is_valid_client_address(ip)
-            print('new ip:', ip)
+            logger.info(f'[DHCP] New device')
         if not any([host.ip == ip for host in known_hosts]):
-            print('add', mac_address, ip, packet.host_name)
+            logger.success(f'[DHCP] Device registered. MAC: {mac_address}; IP: {ip}; HostName: {packet.host_name}')
             self.hosts.replace(Host(mac_address, ip, packet.host_name or '', time.time()))
         return ip
 
