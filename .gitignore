@@ -164,3 +164,4 @@ cython_debug/
 *.json
 *.yml
 *.csv
+!src/docker-compose.yml

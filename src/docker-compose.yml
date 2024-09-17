@@ -1,0 +1,51 @@
+networks:
+  dns-local:
+    external: false
+    enable_ipv6: false
+
+services:
+
+  bns-main:
+    build: ./main
+    container_name: bns-main
+    restart: unless-stopped
+    volumes:
+      - "config.yml:/app/config.yml"
+    networks:
+      - dns-local
+    depends_on:
+      - bns-redis
+
+  bns-redis:
+    image: redis:4.0.14-alpine
+    container_name: bns-redis
+    restart: unless-stopped
+    volumes:
+      - ./redis:/data
+    networks:
+      - dns-local
+
+  bns-dns:
+    build: ./dns
+    container_name: bns-dns
+    restart: unless-stopped
+    networks:
+      - dns-local
+    ports:
+      - "53:53/udp"
+      - "53:53/tcp"
+      - "127.0.0.1:953:953/tcp"
+    depends_on:
+      - bns-main
+      - bns-redis
+
+  bns-dhcp:
+    build: ./dhcp
+    container_name: bns-dhcp
+    restart: unless-stopped
+    network_mode: host
+    networks:
+      - dns-local
+    depends_on:
+      - bns-main
+      - bns-redis
