@@ -1,7 +1,9 @@
 # https://github.com/niccokunzmann/python_dhcp_server
 
 import collections
+import ipaddress
 import queue
+import signal
 import socket
 import threading
 import time
@@ -194,7 +196,7 @@ class Transaction(object):
     def received_dhcp_discover(self, discovery):
         if self.is_done(): return
         # self.configuration.debug('discover:\n {}'.format(str(discovery).replace('\n', '\n  ')))
-        logger.info(f"[DHCP] DHCPDISCOVER; {'srv <- cli' if discovery.message_type == 1 else 'srv -> cli'}; MAC: {discovery.client_mac_address}")
+        logger.info(f"DHCPDISCOVER; {'srv <- cli' if discovery.message_type == 1 else 'srv -> cli'}; MAC: {discovery.client_mac_address}")
         self.send_offer(discovery)
 
     def send_offer(self, discovery):
@@ -246,10 +248,11 @@ class DHCPServerConfiguration(object):
     length_of_transaction = 40
 
     bind_address = ''
-    network = '10.0.0.0'
+    network = '10.47.0.0'
     broadcast_address = '255.255.255.255'
     subnet_mask = '255.255.255.0'
-    router = None  # list of ips
+    subnet_cidr = 24
+    router = ['10.47.0.1']  # list of ips
     ip_address_lease_time = 300  # seconds
     domain_name_server = ["8.8.8.8", "8.8.4.4"]  # list of ips
 
@@ -271,9 +274,17 @@ class DHCPServerConfiguration(object):
                 _ba = get_interface_ip(_ba)
                 logger.info(f"Using interface {__ba} ({_ba})")
             self.bind_address = _ba
-            self.network = config.get('network', self.network)
+
+            if "/" in config.get('network'):
+                net = ipaddress.ip_network(config.get('network'))
+                self.network = str(net.network_address)
+                self.subnet_mask = str(net.netmask)
+                self.subnet_cidr = net.prefixlen
+            else:
+                self.network = config.get('network', self.network)
+                self.subnet_mask = config.get('netmask', self.subnet_mask)
+                self.subnet_cidr = ipaddress.ip_network((0, self.subnet_mask)).prefixlen
             self.broadcast_address = config.get('broadcast', self.broadcast_address)
-            self.subnet_mask = config.get('netmask', self.subnet_mask)
             self.router = config.get('router', self.router)
             self.ip_address_lease_time = config.get('lease_time', self.ip_address_lease_time)
             self.domain_name_server = config.get('dns_servers', self.domain_name_server)
@@ -451,9 +462,9 @@ class DHCPServer(object):
 
     def __init__(self, configuration: DHCPServerConfiguration = None):
         self.configuration = configuration or DHCPServerConfiguration()
-        logger.info(f'DHCP server ({configuration.server_addresses}) configuration')
-        logger.info(f'Network: {configuration.network} {configuration.subnet_mask}')
-        logger.info(f'Options: gw: {configuration.router}, dns: {configuration.domain_name_server}, lease: {configuration.ip_address_lease_time}s')
+        logger.info(f'DHCP configuration')
+        logger.info(f'Network: {configuration.network}/{configuration.subnet_cidr}')
+        logger.info(f'Options: dhcp ips: {tuple(configuration.server_addresses)}; gw: {tuple(configuration.router)}; dns: {tuple(configuration.domain_name_server)}; lease: {configuration.ip_address_lease_time}s')
         self.socket = socket(type=SOCK_DGRAM)
         self.socket.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
         self.socket.bind((self.configuration.bind_address, 67))
@@ -463,12 +474,15 @@ class DHCPServer(object):
         self.hosts = HostDatabase(self.configuration.host_file)
         self.time_started = time.time()
 
-    def close(self):
-        self.socket.close()
+    def close(self, *s):
         self.closed = True
+        if s:
+            time.sleep(1)
+        self.socket.close()
         self.delay_worker.close()
         for transaction in list(self.transactions.values()):
             transaction.close()
+        logger.success("Closed")
 
     def update(self, timeout=0):
         try:
@@ -508,11 +522,11 @@ class DHCPServer(object):
             for host in known_hosts:
                 if self.is_valid_client_address(host.ip):
                     ip = host.ip
-            logger.info(f'[DHCP] Known device. MAC: {mac_address}; IP: {ip}')
+            logger.info(f'Known device. MAC: {mac_address}; IP: {ip}')
         if ip is None and self.is_valid_client_address(requested_ip_address) and ip not in assigned_addresses:
             # 2. choose valid requested ip address
             ip = requested_ip_address
-            logger.info(f'[DHCP] New device; Requested IP: {ip}. MAC: {mac_address}')
+            logger.info(f'New device; Requested IP: {ip}. MAC: {mac_address}')
         if ip is None:
             # 3. choose new, free ip address
             chosen = False
@@ -526,20 +540,20 @@ class DHCPServer(object):
                 network_hosts.sort(key=lambda host: host.last_used)
                 ip = network_hosts[0].ip
                 assert self.is_valid_client_address(ip)
-            logger.info(f'[DHCP] New device. MAC: {mac_address}')
+            logger.info(f'New device. MAC: {mac_address}')
         if not any([host.ip == ip for host in known_hosts]):
-            logger.success(f'[DHCP] Device registered. MAC: {mac_address}; IP: {ip}; HostName: {packet.host_name}')
+            logger.success(f'Device registered. MAC: {mac_address}; IP: {ip}; HostName: {packet.host_name}')
             self.hosts.replace(Host(mac_address, ip, packet.host_name or '', time.time()))
         return ip
 
     def received(self, packet):
         if not self.transactions[packet.transaction_id].receive(packet):
             # self.configuration.debug('received:\n {}'.format(str(packet).replace('\n', '\n  ')))
-            logger.info(f"[DHCP] client_has_chosen: {packet.named_options['dhcp_message_type']}; {'srv <- cli' if packet.message_type == 1 else 'srv -> cli'}; MAC: {packet.client_mac_address}")
+            logger.info(f"client_has_chosen: {packet.named_options['dhcp_message_type']}; {'srv <- cli' if packet.message_type == 1 else 'srv -> cli'}; MAC: {packet.client_mac_address}")
         
     def client_has_chosen(self, packet):
         # self.configuration.debug('client_has_chosen:\n {}'.format(str(packet).replace('\n', '\n  ')))
-        logger.info(f"[DHCP] client_has_chosen: {packet.named_options['dhcp_message_type']}; {'srv <- cli' if packet.message_type == 1 else 'srv -> cli'}; MAC: {packet.client_mac_address}")
+        logger.info(f"client_has_chosen: {packet.named_options['dhcp_message_type']}; {'srv <- cli' if packet.message_type == 1 else 'srv -> cli'}; MAC: {packet.client_mac_address}")
         host = Host.from_packet(packet)
         if not host.has_valid_ip():
             return
@@ -548,7 +562,7 @@ class DHCPServer(object):
     def broadcast(self, packet):
         # self.configuration.debug('broadcasting:\n {}'.format(str(packet).replace('\n', '\n  ')))
         _readed = ReadBootProtocolPacket(packet.to_bytes())
-        logger.info(f"[DHCP] broadcasting: {_readed.named_options['dhcp_message_type']}; {'srv <- cli' if _readed.message_type == 1 else 'srv -> cli'}; MAC: {_readed.client_mac_address}")
+        logger.info(f"broadcasting: {_readed.named_options['dhcp_message_type']}; {'srv <- cli' if _readed.message_type == 1 else 'srv -> cli'}; MAC: {_readed.client_mac_address}")
         for addr in self.configuration.server_addresses:
             broadcast_socket = socket(type=SOCK_DGRAM)
             broadcast_socket.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
@@ -563,13 +577,14 @@ class DHCPServer(object):
                 broadcast_socket.close()
 
     def run(self):
-        logger.success("[DHCP] Server started")
+        logger.success("Started")
+        signal.signal(signal.SIGINT, self.close)
+        signal.signal(signal.SIGTERM, self.close)
         while not self.closed:
             try:
                 self.update(1)
             except KeyboardInterrupt:
                 self.close()
-                logger.success("[DHCP] Closed")
             except Exception as e:
                 logger.exception(e)
 
