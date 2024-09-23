@@ -161,7 +161,6 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-*.json
-*.yml
-*.csv
-!src/docker-compose.yml
+hosts.json
+config.yml
+redis/
