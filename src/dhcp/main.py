@@ -56,6 +56,8 @@ class Manage:
                     continue
                 act, data = task.split(b":", 1)
                 match act:
+                    case b"ping":
+                        self.redis.rpush("main", f"dhcp:pong")
                     case b"config":
                         self._config = json.loads(data)
                     case b"stop":
@@ -69,12 +71,9 @@ class Manage:
         self.lthread.start()
 
     def callback(self, message: dict):
-        # 0 - bot
-        # 1 - dhcp
-        # 2 - dns
-        self.redis.rpush("main", f"1:{json.dumps(message)}")
+        self.redis.rpush("main", f"dhcp:{json.dumps(message)}")
 
-    def config(self, cfg: DHCPServerConfiguration):
+    def config(self):
         logger.info("Waiting config from bns-main.")
         i = 0
         while self._config is None:
@@ -85,6 +84,7 @@ class Manage:
                 break
             i+=1
         logger.success("Config received.")
+        self.dhcp_server.configuration = DHCPServerConfiguration(self._config)
         self.dhcp_server.print_configuration()
 
     def start(self):
