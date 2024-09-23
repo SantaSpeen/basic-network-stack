@@ -3,7 +3,7 @@ import argparse
 from loguru import logger
 
 from config import Config
-from dhcp import DHCPServerConfiguration, DHCPServer
+from core.dhcp import DHCPServerConfiguration, DHCPServer
 
 __title__ = "BasicNetworkStack"
 __version__ = "0.1.0"

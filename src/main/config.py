@@ -49,10 +49,8 @@ class Config:
             with open(self._file, "w", encoding="utf-8") as f:
                 f.write(textwrap.dedent("""\
                     dhcp:
-                        bind: all
-                        network: 10.0.0.0
-                        netmask: 255.255.255.0
-                        router: 10.0.0.1
+                        network: 10.47.0.0/24
+                        router: 10.47.0.1
                         dns_servers: [8.8.8.8, 8.8.4.4]
                         lease_time: 300
                         broadcast: 10.0.0.255
