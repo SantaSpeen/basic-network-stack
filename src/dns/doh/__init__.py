@@ -29,7 +29,7 @@ class DNSOverHTTPS:
 
     def __init__(self):
         self._provider = self._available_providers['google']
-        self._session: httpx.Client = None
+        self._session = httpx.Client()
 
     @property
     def provider(self):
@@ -60,51 +60,34 @@ class DNSOverHTTPS:
             raise InvalidDoHProvider(f"Invalid URL. Must start with 'https'.")
         self._available_providers[name] = address
 
+    def resolve_raw(self, domain_name: str, rdatatype: RdataType):
+        req_message = make_query(domain_name, rdatatype)
+        res_message = query_https(req_message, self._provider, session=self._session)
+        rcode = Rcode(res_message.rcode())
+        if rcode != Rcode.NOERROR:
+            raise DNSQueryFailed(f"Failed to query DNS {rdatatype.name} from host '{domain_name}' (rcode = {rcode.name}")
 
+        answers = res_message.resolve_chaining().answer
+        if answers is None:
+            return None
 
-def _resolve(session, doh_endpoint, host, rdatatype):
-    req_message = make_query(host, rdatatype)
-    res_message = query_https(req_message, doh_endpoint, session=session)
-    rcode = Rcode(res_message.rcode())
-    if rcode != Rcode.NOERROR:
-        raise DNSQueryFailed(f"Failed to query DNS {rdatatype.name} from host '{host}' (rcode = {rcode.name}")
+        return tuple(str(i) for i in answers)
 
-    answers = res_message.resolve_chaining().answer
-    if answers is None:
-        return None
+    def resolve(self, domain_name: str, ipv6=False):
+        answers = set()
 
-    return tuple(str(i) for i in answers)
+        # Query A type (IPv4)
+        A_ANSWERS = self.resolve_raw(domain_name, RdataType.A)
+        if A_ANSWERS is not None:
+            answers.update(A_ANSWERS)
 
+        if ipv6:
+            # Query AAAA type (IPv6)
+            AAAA_ANSWERS = self.resolve_raw(domain_name, RdataType.AAAA)
+            if AAAA_ANSWERS is not None:
+                answers.update(AAAA_ANSWERS)
 
-def resolve_dns(host):
-    if _provider is None:
-        raise NoDoHProvider("There is no active DoH provider")
+        if not answers:
+            raise DNSQueryFailed(f"DNS server {self._provider} returned empty results from host '{domain_name}'")
 
-    session = get_resolver_session()
-
-    if session is None:
-        session = httpx.Client()
-        set_resolver_session(session)
-
-    answers = set()
-
-    # Reuse is good
-    def query(rdatatype):
-        return _resolve(session, _provider, host, rdatatype)
-
-    # Query A type
-    A_ANSWERS = query(RdataType.A)
-    if A_ANSWERS is not None:
-        answers.update(A_ANSWERS)
-
-    # Query AAAA type
-    AAAA_ANSWERS = query(RdataType.AAAA)
-    if AAAA_ANSWERS is not None:
-        answers.update(AAAA_ANSWERS)
-
-    if not answers:
-        raise DNSQueryFailed(
-            f"DNS server {_provider} returned empty results from host '{host}'"
-        )
-
-    return list(answers)
+        return answers
