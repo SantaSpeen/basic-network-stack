@@ -1,4 +1,4 @@
-# https://github.com/mansuf/requests-doh/tree/main
+# https://github.com/mansuf/requests-doh
 
 import httpx
 from dns.message import make_query
