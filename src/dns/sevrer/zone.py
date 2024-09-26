@@ -26,6 +26,7 @@ TYPE_LOOKUP = {
     'SRV': (dns.SRV, QTYPE.SRV),
     'TXT': (dns.TXT, QTYPE.TXT),
     'SPF': (dns.TXT, QTYPE.TXT),
+    'HTTPS': (dns.HTTPS, QTYPE.HTTPS)
 }
 
 class Record:

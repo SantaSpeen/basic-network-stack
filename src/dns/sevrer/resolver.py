@@ -31,6 +31,10 @@ class ProxyResolver(LibProxyResolver):
     def _resolve_over_https(self, request):
         reply = request.reply()
         type_name = QTYPE[request.q.qtype]
+        if type_name not in TYPE_LOOKUP:
+            logger.warning(f"Unknown {type_name=}. '{request.q.qname}' ({type_name})")
+            reply.header.rcode = getattr(RCODE, 'NXDOMAIN')
+            return reply
         rcls, qtype = TYPE_LOOKUP[type_name]
         res = self.doh.resolve_raw(str(request.q.qname), type_name)
         if not res:
@@ -61,10 +65,15 @@ class ProxyResolver(LibProxyResolver):
         return reply
 
     def resolve(self, request, handler):
-        local_reply = self._resolve_from_local(request)
-        if local_reply:
-            return local_reply
-        if self.doh:
-            return self._resolve_over_https(request)
-        else:
+        try:
+            local_reply = self._resolve_from_local(request)
+            if local_reply:
+                return local_reply
+            if self.doh:
+                return self._resolve_over_https(request)
+            else:
+                return self._resolve_from_upstream(request, handler)
+        except Exception as e:
+            logger.exception(e)
             return self._resolve_from_upstream(request, handler)
+
