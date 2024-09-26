@@ -37,6 +37,11 @@ class DNSServer:
             self.tcp_server.start_thread()
         logger.info('DNS server started')
 
+    def is_alive(self):
+        if self.tcp:
+            return self.udp_server.isAlive() and self.tcp_server.isAlive()
+        return self.udp_server.isAlive()
+
     def stop(self):
         self.udp_server.stop()
         self.udp_server.server.server_close()
