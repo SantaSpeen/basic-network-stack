@@ -13,7 +13,7 @@ from .exceptions import (
 )
 
 class DNSOverHTTPS:
-    _available_providers = {
+    available_providers = {
         "cloudflare": "https://cloudflare-dns.com/dns-query",
         "cloudflare-security": "https://security.cloudflare-dns.com/dns-query",
         "cloudflare-family": "https://family.cloudflare-dns.com/dns-query",
@@ -28,8 +28,11 @@ class DNSOverHTTPS:
     }
 
     def __init__(self):
-        self._provider = self._available_providers['google']
+        self._provider = self.available_providers['google']
         self._session = httpx.Client()
+
+    def __str__(self):
+        return f"DNSOverHTTPS(provider={self._provider!r})"
 
     @property
     def provider(self):
@@ -37,9 +40,9 @@ class DNSOverHTTPS:
 
     @provider.setter
     def provider(self, value):
-        if value not in self._available_providers:
+        if value not in self.available_providers:
             raise DoHProviderNotExist(f"Provider '{value}' does not exist.")
-        self._provider = value
+        self._provider = self.available_providers[value]
 
     @property
     def session(self):
@@ -53,12 +56,12 @@ class DNSOverHTTPS:
 
     @property
     def providers(self):
-        return self._available_providers
+        return self.available_providers
 
     def add_provider(self, name, address):
         if address.startswith("https"):
             raise InvalidDoHProvider(f"Invalid URL. Must start with 'https'.")
-        self._available_providers[name] = address
+        self.available_providers[name] = address
 
     def resolve_raw(self, domain_name: str, rdatatype: RdataType):
         req_message = make_query(domain_name, rdatatype)
@@ -71,7 +74,7 @@ class DNSOverHTTPS:
         if answers is None:
             return None
 
-        return tuple(str(i) for i in answers)
+        return list(str(i) for i in answers)
 
     def resolve(self, domain_name: str, ipv6=False):
         answers = set()
@@ -90,4 +93,4 @@ class DNSOverHTTPS:
         if not answers:
             raise DNSQueryFailed(f"DNS server {self._provider} returned empty results from host '{domain_name}'")
 
-        return answers
+        return list(answers)
