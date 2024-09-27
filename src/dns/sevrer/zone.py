@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Literal, Any, Iterable
 
@@ -28,6 +29,17 @@ TYPE_LOOKUP = {
     'SPF': (dns.TXT, QTYPE.TXT),
     'HTTPS': (dns.HTTPS, QTYPE.HTTPS)
 }
+
+@dataclass
+class SOA:
+    ns: str
+    email: str
+    serial_no: str = int((datetime.now(timezone.utc) - datetime(1970, 1, 1, tzinfo=timezone.utc)).total_seconds())
+    refresh: int = 2 * H
+    retry: int  = 10 * H
+    expire: int = 10 * H
+    min_ttl: int  = 5 * M
+
 
 class Record:
     def __init__(self, domain: str, type: RecordType, value: Any):
@@ -79,8 +91,8 @@ class Record:
 
 class Zone:
 
-    def __init__(self, domain: str):
-        self.serial_no = int((datetime.now(timezone.utc) - datetime(1970, 1, 1, tzinfo=timezone.utc)).total_seconds())
+    def __init__(self, domain: str, soa: SOA):
+        self.serial_no = soa.serial_no
         if not domain.endswith("."):
             domain += "."
         self.domain = domain
@@ -88,11 +100,8 @@ class Zone:
         self.ttl = TTL
         self.records: list[Record] = []
         self.label = DNSLabel(domain)
+        Record(self.domain, "SOA", [soa.ns, soa.email.replace("@", "."), self.serial_no, soa.refresh, soa.retry, soa.expire, soa.min_ttl]).link(self)
         logger.info(f"[{self.domain!r}] Zone created: level: {self.lvl}, ttl: {self.ttl}, serial_no: {self.serial_no}")
-
-    def add_soa(self, ns1: str, email: str, refresh=2*H, retry=10*H, expire=10*H, min_ttl=5*M) -> None:
-        soa = Record(self.domain, "SOA", [ns1, email.replace("@", "."), self.serial_no, refresh, retry, expire, min_ttl])
-        self.add_record(soa)
 
     def add_record(self, record: Record):
         record.link(self, True)

@@ -5,7 +5,7 @@
 - [x] DNS Over HTTPS (doh)
 - [x] DNS Server
 - [x] doh2dns (DNS Bridge)
-- [ ] Caches
+- [x] Caches (Only for DOH)
 - [x] Local Zones
-  - [ ] Loading from file
+- [x] Spoofing
 - [ ] Интеграция с BNS
