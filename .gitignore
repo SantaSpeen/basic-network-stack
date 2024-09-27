@@ -164,3 +164,4 @@ cython_debug/
 hosts.json
 config.yml
 redis/
+spoof*
