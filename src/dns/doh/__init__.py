@@ -1,4 +1,5 @@
 # https://github.com/mansuf/requests-doh
+from typing import Literal
 
 import httpx
 from dns.message import make_query
@@ -12,19 +13,26 @@ from .exceptions import (
     NoDoHProvider, InvalidDoHProvider
 )
 
+AvailableProviders = Literal[
+    "cloudflare",
+    "opendns",
+    "opendns-family",
+    "google"
+]
+
 class DNSOverHTTPS:
-    available_providers = {
-        "cloudflare": "https://cloudflare-dns.com/dns-query",
-        "cloudflare-security": "https://security.cloudflare-dns.com/dns-query",
-        "cloudflare-family": "https://family.cloudflare-dns.com/dns-query",
-        "opendns": "https://doh.opendns.com/dns-query",
-        "opendns-family": "https://doh.familyshield.opendns.com/dns-query",
-        "adguard": "https://dns.adguard.com/dns-query",
-        "adguard-family": "https://dns-family.adguard.com/dns-query",
-        "adguard-unfiltered": "https://unfiltered.adguard-dns.com/dns-query",
-        "quad9": "https://dns.quad9.net/dns-query",
-        "quad9-unsecured": "https://dns10.quad9.net/dns-query",
-        "google": "https://dns.google/dns-query"
+    available_providers: dict[AvailableProviders: tuple[str, str]] = {
+        "cloudflare": ("https://cloudflare-dns.com/dns-query", "1.1.1.1"),
+        # "cloudflare-security": "https://security.cloudflare-dns.com/dns-query",
+        # "cloudflare-family": "https://family.cloudflare-dns.com/dns-query",
+        "opendns": ("https://doh.opendns.com/dns-query", "208.67.222.222"),
+        "opendns-family": ("https://doh.familyshield.opendns.com/dns-query", "208.67.222.123 "),
+        # "adguard": "https://dns.adguard.com/dns-query",
+        # "adguard-family": "https://dns-family.adguard.com/dns-query",
+        # "adguard-unfiltered": "https://unfiltered.adguard-dns.com/dns-query",
+        # "quad9": "https://dns.quad9.net/dns-query",
+        # "quad9-unsecured": "https://dns10.quad9.net/dns-query",
+        "google": ("https://dns.google/dns-query", "8.8.8.8")
     }
 
     def __init__(self):
@@ -39,7 +47,7 @@ class DNSOverHTTPS:
         return self._provider
 
     @provider.setter
-    def provider(self, value):
+    def provider(self, value: AvailableProviders):
         if value not in self.available_providers:
             raise DoHProviderNotExist(f"Provider '{value}' does not exist.")
         self._provider = self.available_providers[value]
@@ -65,7 +73,7 @@ class DNSOverHTTPS:
 
     def resolve_raw(self, domain_name: str, rdatatype: RdataType):
         req_message = make_query(domain_name, rdatatype)
-        res_message = query_https(req_message, self._provider, session=self._session)
+        res_message = query_https(req_message, self._provider[0], source=self.provider[1],session=self._session)
         rcode = Rcode(res_message.rcode())
         if rcode != Rcode.NOERROR:
             raise DNSQueryFailed(f"Failed to query DNS {rdatatype.name} from host '{domain_name}' (rcode = {rcode.name})")
