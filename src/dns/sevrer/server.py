@@ -8,12 +8,6 @@ from loguru import logger
 from .resolver import ProxyResolver
 from .zone import Zone
 
-logger.remove()
-logger.add(sys.stdout, level="INFO", backtrace=False, diagnose=False,
-           format="\r<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | {message}")
-# TODO: log in file
-
-
 class DNSServer:
     def __init__(self, zones: list[Zone] | None = None, upstream="8.8.4.4", doh=None, port=53, tcp=True):
         self.zones: list[Zone] = zones or []
@@ -63,3 +57,6 @@ class DNSServer:
 
     def add_spoof(self, domain: str):
         self.resolver.cache.spoof_list.append(domain)
+
+    def add_spoof_callback(self, callback):
+        self.resolver.cache.spoof_callbacks.append(callback)

@@ -21,6 +21,7 @@ class DNSCache:
         self.spoof_list = []
         self.spoof_data = {}
         self.spoof_ips = set()
+        self.spoof_callbacks = []
         self.worker = threading.Thread(target=self._worker, daemon=True)
         self.worker.start()
 
@@ -46,6 +47,7 @@ class DNSCache:
                 logger.info(f"Spoofed: '{domain_name}'")
                 self.spoof_data[domain_name] = _res
                 for r in _res:
+                    [callback(r, domain_name) for callback in self.spoof_callbacks]
                     self.spoof_ips.add(r)
 
     def _sleep(self, t):
@@ -99,6 +101,9 @@ class ProxyResolver(LibProxyResolver):
         reply = request.reply()
         rcls, qtype = TYPE_LOOKUP[type_name]
         domain_name = str(request.q.qname)
+        # if domain_name == "dns.google.":
+        #     reply.header.rcode = getattr(RCODE, 'NXDOMAIN')
+        #     return reply
         _cached = self.cache.get(domain_name)
         if _cached:
             logger.info(f'Found in cache.')

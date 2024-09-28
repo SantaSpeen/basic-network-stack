@@ -9,32 +9,52 @@ S = 1
 M = S*60
 H = M*60
 TTL = 1*H
-RecordType = Literal[
-    'A', 'AAAA', 'CAA', 'CNAME', 'DNSKEY', 'MX', 'NAPTR', 'NS', 'PTR', 'RRSIG', 'SOA', 'SRV', 'TXT', 'SPF'
-]
+
 TYPE_LOOKUP = {
+    # https://yandex.cloud/ru/docs/dns/concepts/resource-record
     'A': (dns.A, QTYPE.A),
     'AAAA': (dns.AAAA, QTYPE.AAAA),
     'CAA': (dns.CAA, QTYPE.CAA),
     'CNAME': (dns.CNAME, QTYPE.CNAME),
-    'DNSKEY': (dns.DNSKEY, QTYPE.DNSKEY),
+    # 'ANAME': (dns.ANAME, QTYPE.ANAME),  # Not supported by dnslib
     'MX': (dns.MX, QTYPE.MX),
-    'NAPTR': (dns.NAPTR, QTYPE.NAPTR),
     'NS': (dns.NS, QTYPE.NS),
     'PTR': (dns.PTR, QTYPE.PTR),
-    'RRSIG': (dns.RRSIG, QTYPE.RRSIG),
     'SOA': (dns.SOA, QTYPE.SOA),
     'SRV': (dns.SRV, QTYPE.SRV),
+    # 'SVCB': (dns.SVCB, QTYPE.SVCB)  # Not supported by dnslib
+    'HTTPS': (dns.HTTPS, QTYPE.HTTPS),
     'TXT': (dns.TXT, QTYPE.TXT),
+    # https://www.dynu.com/Resources/DNS-Records
+    'RP': (dns.RP, QTYPE.RP),
+    # 'URI': (dns.URI, QTYPE.URI),  # Not supported by dnslib
     'SPF': (dns.TXT, QTYPE.TXT),
-    'HTTPS': (dns.HTTPS, QTYPE.HTTPS)
+
+    # Secure DNS
+    # https://www.dynu.com/Resources/DNS-Records
+    'DNSKEY': (dns.DNSKEY, QTYPE.DNSKEY),
+    'DS': (dns.DS, QTYPE.DS),
+    # 'HINFO': (dns.HINFO, QTYPE.HINFO), # Not supported by dnslib
+    'LOC': (dns.LOC, QTYPE.LOC),
+    'NAPTR': (dns.NAPTR, QTYPE.NAPTR),
+    'TLSA ': (dns.TLSA , QTYPE.TLSA),
+    'RRSIG': (dns.RRSIG, QTYPE.RRSIG),
 }
+MultiRecordType = Literal[  # Records that have multiple values
+    'CAA', 'MX', 'SOA', 'SRV', 'HTTPS', 'RP',
+    # Secure DNS
+    'DNSKEY', 'DS', 'LOC', 'NAPTR', 'TLSA', 'RRSIG'
+]
+SingleRecordType = Literal[  # Records that have single value
+    'A', 'AAAA', 'CNAME', 'NS', 'PTR', 'TXT', 'SPF'
+]
+RecordType = Literal[SingleRecordType, MultiRecordType]
 
 @dataclass
 class SOA:
     ns: str
     email: str
-    serial_no: str = int((datetime.now(timezone.utc) - datetime(1970, 1, 1, tzinfo=timezone.utc)).total_seconds())
+    serial_no: int = int((datetime.now(timezone.utc) - datetime(1970, 1, 1, tzinfo=timezone.utc)).total_seconds())
     refresh: int = 2 * H
     retry: int  = 10 * H
     expire: int = 10 * H
@@ -42,7 +62,7 @@ class SOA:
 
 
 class Record:
-    def __init__(self, domain: str, type: RecordType, value: Any):
+    def __init__(self, domain: str, type: RecordType, value: list[Any] | str):
         self.domain = domain
         self.type = type
         self.value = value
@@ -59,12 +79,10 @@ class Record:
         self.domain = self.domain.replace("@", zone.domain)
         if not self.domain.endswith("."):
             self.domain += "."
-        self.qname = DNSLabel(self.domain)
-        self.rr = RR(self.qname, self.qtype, rdata=self.rcls(self.value), ttl=TTL)
 
         # Fix @ in value
-        if self.type in ("SOA", "MX"):
-            if not isinstance(self.value, Iterable):
+        if self.type in MultiRecordType:
+            if not isinstance(self.value, list):
                 raise ValueError(f"Value must be an iterable for {self.type} record")
             for i, v in enumerate(self.value):
                 if isinstance(v, str):
@@ -72,6 +90,9 @@ class Record:
         else:
             if isinstance(self.value, str):
                 self.value = self.value.replace("@", zone.domain)
+
+        self.qname = DNSLabel(self.domain)
+        self.rr = RR(self.qname, self.qtype, rdata=self.rcls(self.value), ttl=TTL)
 
         # Check if domain matches zone
         if self.domain.split(".")[-zone.lvl:] != zone.domain.split("."):
