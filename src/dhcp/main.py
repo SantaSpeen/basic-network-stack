@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 import signal
 import sys
 import time
@@ -14,9 +15,10 @@ from core import DHCPServer
 from core import DHCPServerConfiguration
 
 logger.remove()
-logger.add(sys.stdout, level="INFO", backtrace=False, diagnose=False,
+logger.add(sys.stdout, level="INFO", backtrace=False, diagnose=False, enqueue=True,
            format="\r<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | {message}")
-# TODO: log in file
+os.makedirs("/var/log/bns/dhcp/", exist_ok=True)
+logger.add("/var/log/bns/dhcp/info.log", rotation="10 MB", retention="10 days", compression="zip")
 
 docker_mode = False
 if getenv("IN_DOCKER"):

@@ -1,6 +1,8 @@
 # https://github.com/niccokunzmann/python_dhcp_server
 
 import collections
+import ipaddress
+import random
 import select
 import socket
 import threading
@@ -12,6 +14,11 @@ from .config import DHCPServerConfiguration
 from .database import Host, HostDatabase
 from .packets import ReadBootProtocolPacket, WriteBootProtocolPacket
 
+def get_random_ip(start_ip, end_ip):
+    start = int(ipaddress.ip_address(start_ip))
+    end = int(ipaddress.ip_address(end_ip))
+    random_ip = str(ipaddress.ip_address(random.randint(start, end)))
+    return random_ip
 
 class Transaction:
 
@@ -112,8 +119,8 @@ class DHCPServer:
         logger.info(f'Network: {self.configuration.network}/{self.configuration.subnet_cidr}')
         logger.info(f'Options: '
                     f'dhcp ips: {tuple(self.configuration.server_addresses)}; '
-                    f'gw: {tuple(self.configuration.router)};'
-                    f' dns: {tuple(self.configuration.domain_name_server)}; '
+                    f'gw: {tuple(self.configuration.router)}; '
+                    f'dns: {tuple(self.configuration.domain_name_server)}; '
                     f'lease: {self.configuration.ip_address_lease_time}s')
 
     def close(self, *s):
@@ -155,36 +162,23 @@ class DHCPServer:
     def get_ip_address(self, packet):
         mac_address = packet.client_mac_address
         requested_ip_address = packet.requested_ip_address
-        known_hosts = self.hosts.get(mac=mac_address)
-        assigned_addresses = set(host.ip for host in self.hosts.all())
-        ip = None
-        if known_hosts:
-            # 1. choose known ip address
-            for host in known_hosts:
-                if self.is_valid_client_address(host.ip):
-                    ip = host.ip
+        host = self.hosts.get(mac=mac_address)
+        if host:
+            ip = host.ip
             logger.info(f'Known device. IP: {ip}; MAC: {mac_address}')
-        if ip is None and self.is_valid_client_address(requested_ip_address) and ip not in assigned_addresses:
-            # 2. choose valid requested ip address
-            ip = requested_ip_address
-            logger.info(f'New device; Requested IP: {ip}. MAC: {mac_address}')
-        if ip is None:
-            # 3. choose new, free ip address
-            chosen = False
-            network_hosts = self.hosts.get(ip=self.configuration.network_filter())
-            for ip in self.configuration.all_ip_addresses():
-                if not any(host.ip == ip for host in network_hosts):
-                    chosen = True
-                    break
-            if not chosen:
-                # 4. reuse old valid ip address
-                network_hosts.sort(key=lambda host: host.last_used)
-                ip = network_hosts[0].ip
-                assert self.is_valid_client_address(ip)
-            logger.info(f'New device. MAC: {mac_address}')
-        if not any([host.ip == ip for host in known_hosts]):
+        else:
+            assigned_addresses = set(host.ip for host in self.hosts.all())
+            if requested_ip_address not in assigned_addresses and self.is_valid_client_address(requested_ip_address):
+                ip = requested_ip_address
+                logger.info(f'New device; Requested IP: {ip}. MAC: {mac_address}')
+            else:
+                ip = get_random_ip(*self.configuration.dhcp_range)
+                while ip in assigned_addresses:
+                    ip = get_random_ip(*self.configuration.dhcp_range)
+                logger.info(f'Device requested assigned IP. New IP: {ip}. MAC: {mac_address}')
+            new_host = Host(mac_address, ip, packet.host_name or '', time.time())
+            self.hosts.add(new_host)
             logger.success(f'Device registered. IP: {ip}; HostName: {packet.host_name}; MAC: {mac_address}')
-            self.hosts.replace(Host(mac_address, ip, packet.host_name or '', time.time()))
         return ip
 
     def received(self, packet):

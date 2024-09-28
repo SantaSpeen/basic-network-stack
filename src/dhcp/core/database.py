@@ -47,15 +47,14 @@ class HostDatabase:
 
     def _write(self):
         with open(self.file, "w", encoding="utf-8") as f:
-            json.dump(self.data, f)
+            json.dump(self.data, f, indent=4)
 
     def get(self, ip=None, mac=None):
-        if not all((ip, mac)):
-            return self.all()
         if ip:
             mac = self.data['ip'][ip]
         if mac:
-            return Host.from_tuple(*self.data['devices'][mac])
+            if self.data['devices'].get(mac):
+                return Host.from_tuple(self.data['devices'][mac])
 
     def add(self, host: Host):
         if host.ip:

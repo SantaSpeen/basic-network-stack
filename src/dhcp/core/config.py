@@ -31,12 +31,13 @@ class DHCPServerConfiguration:
 
     bind_address = ''
     network = '10.47.0.0'
-    broadcast_address = '255.255.255.255'
+    broadcast_address = '10.47.0.255'
+    dhcp_range = ['10.47.0.2', '10.47.0.250']
     subnet_mask = '255.255.255.0'
     subnet_cidr = 24
     router = ['10.47.0.1']  # list of ips
     ip_address_lease_time = 300  # seconds
-    domain_name_server = ["8.8.8.8", "8.8.4.4"]  # list of ips
+    domain_name_server = ['10.47.0.1']  # list of ips
 
     server_addresses = '10.47.0.1'
 
