@@ -1,4 +1,3 @@
-import json
 import socket
 import threading
 import time
@@ -10,7 +9,7 @@ from dnslib.proxy import ProxyResolver as LibProxyResolver
 from loguru import logger
 
 from doh import DNSQueryFailed
-from .zone import TYPE_LOOKUP, TTL
+from .zone import TYPE_LOOKUP
 
 
 class DNSCache:
@@ -19,8 +18,6 @@ class DNSCache:
         self.run = True
         self.cache = {}
         self.spoof_list = []
-        self.spoof_data = {}
-        self.spoof_ips = set()
         self.spoof_callbacks = []
         self.worker = threading.Thread(target=self._worker, daemon=True)
         self.worker.start()
@@ -44,11 +41,9 @@ class DNSCache:
         self.cache[domain_name] = (rrs, time.time() + ttl)
         for domain in self.spoof_list:
             if domain in domain_name:
-                logger.info(f"Spoofed: '{domain_name}'")
-                self.spoof_data[domain_name] = _res
-                for r in _res:
+                logger.success(f"Spoofed: '{domain_name}' {_res}")
+                for r, _ in _res:
                     [callback(r, domain_name) for callback in self.spoof_callbacks]
-                    self.spoof_ips.add(r)
 
     def _sleep(self, t):
         i = 0
@@ -67,11 +62,6 @@ class DNSCache:
                 keys_to_delete = [key for key, (rr, expiry) in self.cache.items() if expiry < current_time]
                 for key in keys_to_delete:
                     del self.cache[key]
-                if self.spoof_data:
-                    with open("spoof.json", "w") as f:
-                        json.dump(self.spoof_data, f, indent=4)
-                    with open("spoof_ips", "w") as f:
-                        f.write("/32, ".join(self.spoof_ips))
             except Exception as e:
                 logger.exception(e)
 
@@ -101,9 +91,6 @@ class ProxyResolver(LibProxyResolver):
         reply = request.reply()
         rcls, qtype = TYPE_LOOKUP[type_name]
         domain_name = str(request.q.qname)
-        # if domain_name == "dns.google.":
-        #     reply.header.rcode = getattr(RCODE, 'NXDOMAIN')
-        #     return reply
         _cached = self.cache.get(domain_name)
         if _cached:
             logger.info(f'Found in cache.')
@@ -117,8 +104,8 @@ class ProxyResolver(LibProxyResolver):
             else:
                 logger.info(f'Found in DOH.')
                 rrs = []
-                for i in res:
-                    rr = RR(request.q.qname, qtype, rdata=rcls(i), ttl=TTL)
+                for i, min_ttl in res:
+                    rr = RR(request.q.qname, qtype, rdata=rcls(i), ttl=min_ttl)
                     rrs.append(rr)
                     reply.add_answer(rr)
                 self.cache.set(domain_name, rrs, res)

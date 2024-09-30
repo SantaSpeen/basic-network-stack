@@ -112,7 +112,7 @@ class Record:
 
 class Zone:
 
-    def __init__(self, domain: str, soa: SOA):
+    def __init__(self, domain: str, soa: SOA | None, ptr=False):
         self.serial_no = soa.serial_no
         if not domain.endswith("."):
             domain += "."
@@ -121,8 +121,11 @@ class Zone:
         self.ttl = TTL
         self.records: list[Record] = []
         self.label = DNSLabel(domain)
-        Record(self.domain, "SOA", [soa.ns, soa.email.replace("@", "."), self.serial_no, soa.refresh, soa.retry, soa.expire, soa.min_ttl]).link(self)
-        logger.info(f"[{self.domain!r}] Zone created: level: {self.lvl}, ttl: {self.ttl}, serial_no: {self.serial_no}")
+        if not ptr:
+            Record(self.domain, "SOA", [soa.ns, soa.email.replace("@", "."), self.serial_no, soa.refresh, soa.retry, soa.expire, soa.min_ttl]).link(self)
+            logger.info(f"[{self.domain!r}] Zone created: level: {self.lvl}, ttl: {self.ttl}, serial_no: {self.serial_no}")
+        else:
+            logger.info(f"[{self.domain!r}] Zone created")
 
     def add_record(self, record: Record):
         record.link(self, True)

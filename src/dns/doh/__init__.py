@@ -78,11 +78,12 @@ class DNSOverHTTPS:
         if rcode != Rcode.NOERROR:
             raise DNSQueryFailed(f"Failed to query DNS {rdatatype.name} from host '{domain_name}' (rcode = {rcode.name})")
 
-        answers = res_message.resolve_chaining().answer
+        chain = res_message.resolve_chaining()
+        answers = chain.answer
         if answers is None:
             return None
 
-        return tuple(str(i) for i in answers)
+        return tuple((str(i), chain.minimum_ttl) for i in answers)
 
     def resolve(self, domain_name: str, ipv6=False):
         answers = set()

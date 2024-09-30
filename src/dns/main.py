@@ -1,7 +1,7 @@
 import os
+import subprocess
 import sys
 import time
-from ezipset import ezIPSet
 from loguru import logger
 
 from doh import DNSOverHTTPS
@@ -13,18 +13,24 @@ logger.add(sys.stdout, level="INFO", backtrace=False, diagnose=False, enqueue=Tr
 os.makedirs("/var/log/bns/dns/", exist_ok=True)
 logger.add("/var/log/bns/dns/info.log", rotation="10 MB", retention="10 days", compression="zip")
 
-ipset = ezIPSet()
 doh = DNSOverHTTPS()
 doh.provider = "google"
 
 # Home zone
-home = Zone("home", SOA("ns.home", "admin@home"))
+home = Zone("home", SOA("ns.home", "santaspeen@yandex.ru"))
 home.add_record(Record("@", "NS", "ns.home."))
-home.add_record(Record("@", "A", "10.47.0.1"))
-home.add_record(Record("@", "A", "10.40.0.10"))
-home.add_record(Record("@", "A", "10.41.0.2"))
 home.add_record(Record("ns.home", "A", "10.47.0.1"))
-home.add_record(Record("torrent.home", "CNAME", "@"))
+home.add_record(Record("lilrt.home", "A", "10.47.0.1"))
+home.add_record(Record("lilrt.home", "A", "10.41.0.2"))
+home.add_record(Record("torrent.home", "CNAME", "lilrt.home."))
+home.add_record(Record("nginx.home", "CNAME", "lilrt.home."))
+home.add_record(Record("lako.home", "A", "192.168.0.10"))
+home.add_record(Record("lako.home", "A", "192.168.0.11"))
+home.add_record(Record("nginx.lako.home", "CNAME", "lako.home."))
+home.add_record(Record("torrent.lako.home", "CNAME", "lako.home."))
+
+home_ptr = Zone("home", None, True)
+
 
 dns_server = DNSServer([home], "8.8.8.8", doh)
 
@@ -63,13 +69,22 @@ dns_server.add_spoof("jetbrains.com.")
 dns_server.add_spoof("github")
 dns_server.add_spoof("copilot")
 
-def _callback(ip, domain):
-    ipset.add_entry('haharkn', ip, comment=domain, ignore_if_exists=True)
+# Spoofing 2ip
+dns_server.add_spoof("2ip.ru.")
+dns_server.add_spoof("2ip.io.")
 
-# Configure ipset
-if 'haharkn' not in ipset.set_names:
-    c = ipset.create_set("haharkn", "hash:ip", with_comment=True)
-    logger.info(f"ipset 'haharkn' created: {c}")
+
+interface = "wg0stg5"
+_added = []
+def _callback(ip, domain):
+    if ip in _added:
+        return
+    _added.append(ip)
+    route_cmd = f"ip route add {ip} dev {interface}"
+    subprocess.run(route_cmd, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    logger.success(f"Added route for {ip};({domain}) via {interface}")
+
+
 dns_server.add_spoof_callback(_callback)
 
 if __name__ == '__main__':
