@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Literal, Any, Iterable
+from typing import Literal, Any, overload
 
 from dnslib import QTYPE, dns, DNSLabel, RR
 from loguru import logger
@@ -95,7 +95,7 @@ class Record:
         self.rr = RR(self.qname, self.qtype, rdata=self.rcls(self.value), ttl=TTL)
 
         # Check if domain matches zone
-        if self.domain.split(".")[-zone.lvl:] != zone.domain.split("."):
+        if not zone.ptr and self.domain.split(".")[-zone.lvl:] != zone.domain.split("."):
             raise ValueError(f"Domain {self.domain!r} does not match zone {zone.domain!r}")
         self.zone = zone
 
@@ -103,7 +103,9 @@ class Record:
         return self.qtype == q.qtype and self.qname == q.qname
 
     def __str__(self):
-        if self.type in ("SOA", "MX"):
+        if self.zone and self.zone.ptr:
+            return f"PTRRecord({self.domain}\t\t{self.value})"
+        if self.type in ('CAA', 'MX', 'SOA', 'SRV', 'HTTPS', 'RP', 'DNSKEY', 'DS', 'LOC', 'NAPTR', 'TLSA', 'RRSIG'):
             return f"Record({self.domain:<20} {TTL}   {self.type:<8}{self.value}); Linked to zone: {self.zone};"
         if self.type in ("TXT", "SPF"):
             return f"Record({self.domain:<20} {TTL}   {self.type:<8}{self.value!r}); Linked to zone: {self.zone};"
@@ -113,7 +115,6 @@ class Record:
 class Zone:
 
     def __init__(self, domain: str, soa: SOA | None, ptr=False):
-        self.serial_no = soa.serial_no
         if not domain.endswith("."):
             domain += "."
         self.domain = domain
@@ -121,16 +122,24 @@ class Zone:
         self.ttl = TTL
         self.records: list[Record] = []
         self.label = DNSLabel(domain)
+        self.ptr = ptr
         if not ptr:
-            Record(self.domain, "SOA", [soa.ns, soa.email.replace("@", "."), self.serial_no, soa.refresh, soa.retry, soa.expire, soa.min_ttl]).link(self)
+            self.serial_no = soa.serial_no
             logger.info(f"[{self.domain!r}] Zone created: level: {self.lvl}, ttl: {self.ttl}, serial_no: {self.serial_no}")
+            Record(self.domain, "SOA", [soa.ns, soa.email.replace("@", "."), self.serial_no, soa.refresh, soa.retry, soa.expire, soa.min_ttl]).link(self)
         else:
             logger.info(f"[{self.domain!r}] Zone created")
 
     def add_record(self, record: Record):
+        if record.type != "PTR" and self.ptr:
+            raise ValueError(f"Cannot add record {record} to PTR zone")
         record.link(self, True)
         logger.info(f"[{self.domain!r}] Added: {record}")
         self.records.append(record)
+
+    def add_records(self, *records: Record):
+        for record in records:
+            self.add_record(record)
 
     def find(self, q, reply=None):
         for record in self.records:
@@ -140,3 +149,19 @@ class Zone:
     def __str__(self):
         return f"Zone({self.domain!r}, {self.serial_no}, {self.ttl})"
 
+
+class PTRZone(Zone):
+
+    def __init__(self, ip_zone: str):
+        ptr_soa = SOA("b.in-addr-servers.arpa.", "nstld.iana.org.", 2024092523, 1800, 900, 604800, 3600)
+        domain = ".".join(reversed(ip_zone.split("."))) + ".in-addr.arpa"
+        super().__init__(domain, ptr_soa, True)
+        self.ttl = 1*H
+
+    def add(self, ip: str, domain: str):
+        ptr = Record(ip.split(".")[-1], "PTR", domain)
+        self.add_record(ptr)
+        return self
+
+    def __str__(self):
+        return f"PTRZone({self.domain!r}, {self.ttl})"

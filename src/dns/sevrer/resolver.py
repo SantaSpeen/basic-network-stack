@@ -42,8 +42,7 @@ class DNSCache:
         for domain in self.spoof_list:
             if domain in domain_name:
                 logger.success(f"Spoofed: '{domain_name}' {_res}")
-                for r, _ in _res:
-                    [callback(r, domain_name) for callback in self.spoof_callbacks]
+                [callback(r, domain_name) for callback in self.spoof_callbacks for r, _ in _res]
 
     def _sleep(self, t):
         i = 0
