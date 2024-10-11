@@ -1,2 +1,2 @@
 loguru~=0.7.2
-redis~=5.0.8
+dhcppython~=0.1.4
