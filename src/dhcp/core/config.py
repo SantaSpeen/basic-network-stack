@@ -61,16 +61,24 @@ class DHCPServerConfiguration:
     router: str = field(default_factory=lambda: '10.47.0.1')
     lease_time: int = 300
     domain_name_servers: set = field(default_factory=lambda: set('10.47.0.1'))
-    dhcp_servers: set = field(default_factory=lambda: set('10.47.0.1'))
+    dhcp_servers: set = field(default_factory=lambda: set())
     data_file: str = 'hosts.json'
+
+    @property
+    def dhcp_range_len(self):
+        return self.dhcp_range[1] - self.dhcp_range[0]
 
     def check(self):
         """Check if the configuration is valid"""
+        if len(self.dhcp_servers) == 0:
+            logger.error("No valid IPs on any interface (maybe not in DHCP network?)")
+            logger.info(f"{get_all_interfaces()}")
+            exit(1)
         s, e = ipaddress.IPv4Address(self.dhcp_range[0]), ipaddress.IPv4Address(self.dhcp_range[1])
         if s not in self.network or e not in self.network:
             logger.error(f"Bad DHCP range: '{s}'-'{e}' not in network")
             exit(1)
-        if self.dhcp_range[1] - self.dhcp_range[0] < 1:
+        if self.dhcp_range_len < 1:
             logger.error(f"Bad DHCP range: range is too small")
             exit(1)
         if ipaddress.IPv4Address(self.router) not in self.network:
@@ -97,7 +105,7 @@ class DHCPServerConfiguration:
             else:
                 data['dhcp_range'] = get_range(data['network'])
             if not data.get('dhcp_servers'):
-                data['dhcp_servers'] = set([i if ipaddress.IPv4Address(i) in data['network'] else data['router'] for i in get_all_interfaces()])
+                data['dhcp_servers'] = set(i for i in get_all_interfaces() if ipaddress.IPv4Address(i) in data['network'])
             data['domain_name_servers'] = set(data['domain_name_servers'])
             conf = cls(**data)
             conf.check()
@@ -112,7 +120,12 @@ class DHCPServerConfiguration:
         """Return the options for the configuration"""
         return options.OptionList(
             [
-
+                options.SubnetMask(self.network.netmask),
+                options.Router(self.router),
+                options.DomainNameServer(*self.domain_name_servers),
+                options.LeaseTime(self.lease_time),
+                options.ServerIdentifier(self.dhcp_servers.pop()),
+                options.DHCPServerIdentifier(self.dhcp_servers.pop())
             ]
         )
 

@@ -1,7 +1,9 @@
 import argparse
+import json
 import os
 import platform
 import sys
+from pathlib import Path
 
 from loguru import logger
 
@@ -12,7 +14,6 @@ logger.remove()
 logger.add(sys.stdout, level="INFO", backtrace=False, diagnose=False, enqueue=True,
            format="\r<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | {message}")
 os.makedirs("/var/log/bns/dhcp/", exist_ok=True)
-os.makedirs("/etc/bns/", exist_ok=True)
 logger.add("/var/log/bns/dhcp/info.log", rotation="10 MB", retention="10 days", compression="zip")
 
 __title__ = "BasicNetworkStack - DHCP Module"
@@ -29,18 +30,24 @@ def init_program():
         print(f"{__title__} v{__version__} ({__build__})")
         sys.exit(0)
     base_config = {
-        "network": "",
-        "router": "",
-        "lease_time": 300,
-        "domain_name_servers": [],
-        "dhcp_servers": [],
-        "data_file": "data.json"
+      "network": "10.47.0.0/24",
+      "dhcp_range": ["10.47.0.1", "10.47.0.2"],
+      "router": "10.47.0.1",
+      "lease_time": 300,
+      "domain_name_servers": ["10.47.0.1"],
+      "data_file": "data.json"
     }
     config_file = "config.json"
     if platform.system() == "Linux":
+        os.makedirs("/etc/bns/", exist_ok=True)
         config_file = "/etc/bns/dhcp.json"
         base_config['data_file'] = "/etc/bns/dhcp-hosts.json"
-    return args.config or config_file
+    config_file = Path(args.config or config_file)
+    if not config_file.exists():
+        logger.info(f"Creating default configuration file: {config_file}")
+        with open(config_file, "w") as f:
+            json.dump(base_config, f, indent=4)
+    return config_file
 
 def main():
     logger.info("Hello")
@@ -48,7 +55,7 @@ def main():
     cfg = DHCPServerConfiguration.from_file(config_file)
     srv = DHCPServer(cfg)
     logger.info(srv)
-    srv.run()
+    srv.start()
 
 if __name__ == '__main__':
     main()

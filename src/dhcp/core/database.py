@@ -54,7 +54,7 @@ class HostDatabase:
 
     def get(self, ip=None, mac=None):
         if ip:
-            mac = self.data['ip'][ip]
+            mac = self.data['index']['ip'].get(ip)
         if self.data['devices'].get(mac):
             return Host.from_tuple(self.data['devices'][mac])
 
@@ -66,8 +66,8 @@ class HostDatabase:
 
     def delete(self, host: Host):
         if host.ip:
-            self.data['index']['ip'][host.ip] = None
-        self.data['devices'][host.mac] = None
+            del self.data['index']['ip'][host.ip]
+        del self.data['devices'][host.mac]
 
     def all(self):
         return list(map(Host.from_tuple, self.data['devices'].values()))
@@ -76,6 +76,15 @@ class HostDatabase:
         self.delete(host)
         self.add(host)
 
+    def _get_free_address(self):
+        if len(self.data['index']['ip']) >= self.conf.dhcp_range_len:
+            logger.error("[DHCP] Range is out")
+            return 0
+        ip = self.conf.random_ip()
+        if self.data['index']['ip'].get(ip):
+            return self._get_free_address()
+        return ip
+
     def find_or_register(self, mac, requested_ip, hostname):
         host = self.get(mac=mac)
         if host:
@@ -83,20 +92,20 @@ class HostDatabase:
                 self.delete(host)
                 return self.find_or_register(mac, requested_ip, hostname)
             logger.info(f'Known device: {host}')
+        new_ip = self._get_free_address()
+        host = self.get(ip=requested_ip)
+        if host:  # Assigned IP
+            host.ip = new_ip
+            self.replace(host)
+            logger.info(f'Known device; New IP; {host}')
         else:
-            if self.get(ip=requested_ip):  # Assigned IP
-                host = self.get(ip=requested_ip)
-                host.ip = self.conf.random_ip()
-                self.replace(host)
-                logger.info(f'Known device; New IP; {host}')
-                return host.ip
-            elif self.conf.in_range(requested_ip):  # IP in range, all is good
+            if self.conf.in_range(requested_ip):  # IP in range, all is good
                 ip = requested_ip
                 logger.info(f'New(?) device; IP: {ip}. MAC: {mac}')
             else:  # ip not in range in requested_ip
-                ip = self.conf.random_ip()
+                ip = new_ip
                 logger.info(f'New device. IP: {ip}. MAC: {mac}')
-            host = Host(mac, ip, host or 'UnknownName', time.time())
+            host = Host(mac, ip, hostname or 'UnknownName', time.time())
             self.add(host)
             logger.success(f'Device registered: {host}')
         return host.ip

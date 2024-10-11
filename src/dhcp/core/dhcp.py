@@ -61,11 +61,14 @@ class Transaction:
 
     def send_offer(self, packet: DHCPPacket):
         mac, req_ip, hostname = packet.chaddr, packet.ciaddr, packet.options.by_code(53).value
+        ip = self.server.hosts.find_or_register(mac, req_ip, hostname)
+        if ip == 0:
+            return
         offer = DHCPPacket.Offer(
             packet.chaddr,
             int(time.time() - self.start),
             packet.xid,
-            self.server.hosts.find_or_register(mac, req_ip, hostname)
+            ip
         )
         self.server.broadcast(offer)
 
@@ -124,7 +127,7 @@ class DHCPServer:
                 transaction.close()
                 self.transactions.pop(transaction_id)
 
-    def run(self):
+    def start(self):
         logger.success("Started")
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.socket.bind(("0.0.0.0", 67))
@@ -132,14 +135,13 @@ class DHCPServer:
             try:
                 self._worker(1)
             except KeyboardInterrupt:
-                self.close()
+                self.stop()
             except Exception as e:
                 logger.exception(e)
 
-    def close(self, *s):
+    def stop(self, *_, **__):
         self.closed = True
-        if s:
-            time.sleep(1)
+        time.sleep(1)
         self.socket.close()
         for transaction in list(self.transactions.values()):
             transaction.close()
