@@ -120,7 +120,8 @@ discord_list = (
     "discord-activities.com",
     "discordactivities.com",
     "discordsays.com",
-    "discordstatus.com"
+    "discordstatus.com",
+    "discordcdn.com"
 )
 dns_server.add_spoof(*discord_list)
 
