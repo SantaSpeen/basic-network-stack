@@ -4,6 +4,8 @@ import platform
 import subprocess
 import sys
 import time
+from collections import defaultdict
+
 from loguru import logger
 
 from doh import DNSOverHTTPS
@@ -101,12 +103,12 @@ discord_list = (
     "dis.gd",
     "discord.co",
     "discord.com",
+    "discord.media",
     "discord.design",
     "discord.dev",
     "discord.gg",
     "discord.gift",
     "discord.gifts",
-    "discord.media",
     "discord.new",
     "discord.store",
     "discord.tools",
@@ -123,7 +125,7 @@ discord_list = (
 dns_server.add_spoof(*discord_list)
 
 _added = []
-_hosts = {}
+_hosts = defaultdict(lambda: [])
 interface = "wg0stg5"
 
 def _callback(ip, domain):
@@ -131,7 +133,7 @@ def _callback(ip, domain):
         return
     _added.append(ip)
     if system != "Linux":
-        _hosts[domain] = ip
+        _hosts[domain].append(ip)
         with open("data.json", "w") as f:
             json.dump(_hosts, f, indent=4)
         logger.success(f"Saved {domain!r} with {ip!r} to file.")

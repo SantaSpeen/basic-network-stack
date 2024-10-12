@@ -1,3 +1,4 @@
+import re
 import socket
 import threading
 import time
@@ -10,6 +11,8 @@ from loguru import logger
 
 from doh import DNSQueryFailed
 from .zone import TYPE_LOOKUP
+
+ipv4_pattern = r'(?:\b25[0-5]|\b2[0-4][0-9]|\b1[0-9]{2}|\b[1-9][0-9]|\b[0-9])(?:\.(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3}'
 
 
 class DNSCache:
@@ -33,12 +36,16 @@ class DNSCache:
                 del self.cache[key]  # Удаляем запись, если TTL истек
         return None
 
-    def set(self, domain_name, rrs: list[RR], _res=None):
+    def set(self, domain_name, rrs: list[RR], _res):
         # Используем TTL из объекта RR для определения времени истечения
         if len(rrs) == 0:
             return
         ttl = rrs[0].ttl
         self.cache[domain_name] = (rrs, time.time() + ttl)
+        for rr in rrs:
+            if rr.rtype == 65:  # HTTPS
+                ipv4_addresses = re.findall(ipv4_pattern, str(rr.rdata))
+                [callback(ip, domain_name) for callback in self.spoof_callbacks for ip in ipv4_addresses]
         for domain in self.spoof_list:
             if domain in domain_name:
                 logger.success(f"Spoofed: '{domain_name}' {_res}")
@@ -104,12 +111,17 @@ class ProxyResolver(LibProxyResolver):
                 logger.info(f'Found in DOH.')
                 rrs = []
                 for i, min_ttl in res:
-                    rr = RR(request.q.qname, qtype, rdata=rcls(i), ttl=min_ttl)
+                    if qtype == QTYPE.HTTPS:
+                        rdata = rcls.fromZone(i.split(" ", maxsplit=2))
+                    else:
+                        rdata=rcls(i)
+                    rr = RR(request.q.qname, qtype, rdata=rdata, ttl=min_ttl)
                     rrs.append(rr)
                     reply.add_answer(rr)
                 self.cache.set(domain_name, rrs, res)
             return reply
         except DNSQueryFailed as e:
+            logger.error(f"Domain: {domain_name} ({type_name})")
             logger.error(e)
             reply.header.rcode = getattr(RCODE, 'NXDOMAIN')
             return reply
