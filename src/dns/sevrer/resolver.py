@@ -42,14 +42,17 @@ class DNSCache:
             return
         ttl = rrs[0].ttl
         self.cache[domain_name] = (rrs, time.time() + ttl)
-        for rr in rrs:
-            if rr.rtype == 65:  # HTTPS
-                ipv4_addresses = re.findall(ipv4_pattern, str(rr.rdata))
-                [callback(ip, domain_name) for callback in self.spoof_callbacks for ip in ipv4_addresses]
         for domain in self.spoof_list:
             if domain in domain_name:
-                logger.success(f"Spoofed: '{domain_name}' {_res}")
-                [callback(r, domain_name) for callback in self.spoof_callbacks for r, _ in _res]
+                if rrs[0].rtype == 65:  # https
+                    for rr in rrs:
+                        ipv4_addresses = re.findall(ipv4_pattern, str(rr.rdata))
+                        if len(ipv4_addresses) > 0:
+                            logger.success(f"Spoofed HTTPS: '{domain_name}' '{rr.rdata}'")
+                        [callback(ip, domain_name) for callback in self.spoof_callbacks for ip in ipv4_addresses]
+                if rrs[0].rtype == 1:  # A
+                    logger.success(f"Spoofed: '{domain_name}' {_res}")
+                    [callback(r, domain_name) for callback in self.spoof_callbacks for r, _ in _res]
 
     def _sleep(self, t):
         i = 0
