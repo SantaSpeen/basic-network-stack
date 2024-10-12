@@ -1,6 +1,7 @@
 import json
 import time
 from pathlib import Path
+from threading import Thread
 
 from loguru import logger
 
@@ -32,11 +33,13 @@ class Host:
         return self.to_tuple() == other.to_tuple()
 
     def __str__(self):
-        return f"Host(name={self.hostname} identifier=({self.mac}) @ {self.ip})"
+        return f"Host(name='{self.hostname}' identifier=({self.mac} @ {self.ip})"
 
 
 class HostDatabase:
     def __init__(self, conf):
+        self.t = None
+        self.run = True
         self.conf = conf
         self.file = Path(self.conf.data_file)
         self.data = {'index': {'ip': {}}, 'devices': {}}
@@ -54,7 +57,7 @@ class HostDatabase:
 
     def get(self, ip=None, mac=None):
         if ip:
-            mac = self.data['index']['ip'].get(ip)
+            mac = self.data['index']['ip'].get(str(ip))
         if self.data['devices'].get(mac):
             return Host.from_tuple(self.data['devices'][mac])
 
@@ -76,6 +79,30 @@ class HostDatabase:
         self.delete(host)
         self.add(host)
 
+    def flush(self):
+        now = time.time()
+        for host in self.all():
+            if host.last_used == 0:
+                continue
+            if now - host.last_used > self.conf.lease_time:
+                self.delete(host)
+        self._write()
+
+    def _auto_deleter(self):
+        while self.run:
+            self.flush()
+            i_max = self.conf.lease_time/10
+            i = 0
+            while i < i_max:
+                time.sleep(1)
+                i += 1
+                if not self.run:
+                    return
+
+    def auto_deleter(self):
+        self.t = Thread(target=self._auto_deleter, daemon=True)
+        self.t.start()
+
     def _get_free_address(self):
         if len(self.data['index']['ip']) >= self.conf.dhcp_range_len:
             logger.error("[DHCP] Range is out")
@@ -92,20 +119,14 @@ class HostDatabase:
                 self.delete(host)
                 return self.find_or_register(mac, requested_ip, hostname)
             logger.info(f'Known device: {host}')
-        new_ip = self._get_free_address()
-        host = self.get(ip=requested_ip)
-        if host:  # Assigned IP
-            host.ip = new_ip
-            self.replace(host)
-            logger.info(f'Known device; New IP; {host}')
+            return host.ip
+        if self.conf.in_range(requested_ip) and self.get(ip=requested_ip) is None:
+            ip = requested_ip
+            logger.info(f'New(?) device; IP: {ip}. MAC: {mac}')
         else:
-            if self.conf.in_range(requested_ip):  # IP in range, all is good
-                ip = requested_ip
-                logger.info(f'New(?) device; IP: {ip}. MAC: {mac}')
-            else:  # ip not in range in requested_ip
-                ip = new_ip
-                logger.info(f'New device. IP: {ip}. MAC: {mac}')
-            host = Host(mac, ip, hostname or 'UnknownName', time.time())
-            self.add(host)
-            logger.success(f'Device registered: {host}')
+            ip = self._get_free_address()
+            logger.info(f'New device. IP: {ip}. MAC: {mac}')
+        host = Host(mac, ip, hostname or 'UnknownName', time.time())
+        self.add(host)
+        logger.success(f'Device registered: {host}')
         return host.ip

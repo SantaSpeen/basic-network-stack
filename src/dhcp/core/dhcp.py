@@ -6,6 +6,7 @@ import time
 from enum import Enum
 
 import select
+from dhcppython import options
 from dhcppython.packet import DHCPPacket
 from loguru import logger
 
@@ -47,7 +48,7 @@ class Transaction:
         if packet.op == "BOOTREQUEST":  # From client
             message = packet.options.by_code(53)
             try:
-                dhcp_message = DHCPMessages[message.value]
+                dhcp_message = DHCPMessages[message.value['dhcp_message_type']]
             except KeyError:
                 logger.warning(f"Unknown dhcp_message: {message}")
                 return False
@@ -60,7 +61,15 @@ class Transaction:
                     logger.warning(f"Unhandled: {dhcp_message}")
 
     def send_offer(self, packet: DHCPPacket):
-        mac, req_ip, hostname = packet.chaddr, packet.ciaddr, packet.options.by_code(53).value
+        mac = packet.chaddr
+        req_ip = packet.options.by_code(50)
+        if req_ip:
+            req_ip = req_ip.value.get('requested_ip_address')
+        else:
+            req_ip = packet.ciaddr
+        hostname = packet.options.by_code(12)
+        if hostname:
+            hostname = hostname.value.get("hostname")
         ip = self.server.hosts.find_or_register(mac, req_ip, hostname)
         if ip == 0:
             return
@@ -68,14 +77,45 @@ class Transaction:
             packet.chaddr,
             int(time.time() - self.start),
             packet.xid,
-            ip
+            ip,
+            option_list=self.server.conf.options
         )
+        offer.siaddr = self.server.conf.dhcp_server_ip
         self.server.broadcast(offer)
 
     def send_ack(self, packet: DHCPPacket):
-        ack = DHCPPacket.Ack
+        host = self.server.hosts.get(mac=packet.chaddr)
+        if host is None:
+            logger.error(f"Fail DORA: No host found; MAC: {packet.chaddr}")
+            return self.send_nak(packet)
+        req_ip = packet.options.by_code(50)
+        if not req_ip:
+            logger.error(f"Fail DORA: No requested IP; MAC: {packet.chaddr}")
+            return self.send_nak(packet)
+        req_ip = req_ip.value.get('requested_ip_address')
+        if host.ip != req_ip:
+            logger.error(f"Fail DORA: IP mismatched {host.ip=} != {req_ip=}; MAC: {packet.chaddr}")
+            return self.send_nak(packet)
+        ack = DHCPPacket.Ack(
+            packet.chaddr,
+            int(time.time() - self.start),
+            packet.xid,
+            host.ip,
+            option_list=self.server.conf.options
+        )
+        ack.siaddr = self.server.conf.dhcp_server_ip
         self.server.broadcast(ack)
 
+    def send_nak(self, packet: DHCPPacket):
+        nack = DHCPPacket.Ack(
+            packet.chaddr,
+            int(time.time() - self.start),
+            packet.xid,
+            '255.255.255.255'
+        )
+        nack.siaddr = self.server.conf.dhcp_server_ip
+        nack.options = options.OptionList([options.options.short_value_to_object(53, "DHCPNAK")])
+        self.server.broadcast(nack)
 
 class DHCPServer:
 
@@ -92,21 +132,20 @@ class DHCPServer:
 
     def broadcast(self, packet: DHCPPacket) -> None:
         logger.info(
-            f"{'broadcasting:':<19}{DHCPMessages[packet.options.by_code(53).value].name:<12}; "
+            f"{'broadcasting:':<14}{packet.options.by_code(53).value['dhcp_message_type']:<12}; "
             f"'srv -> cli'; MAC: {packet.chaddr}"
         )
         with socket.socket(type=socket.SOCK_DGRAM) as broadcast_socket:
             broadcast_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             broadcast_socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-            for addr in self.conf.dhcp_servers:
-                try:
-                    packet.server_identifier = addr
-                    broadcast_socket.bind((addr, 67))
-                    for target in ('255.255.255.255', self.conf.network.broadcast_address):
-                        broadcast_socket.sendto(packet.asbytes, (target, 68))
-                except Exception as e:
-                    logger.exception(e)
-                    logger.error(f"Failed to broadcast from {addr}: {e}")
+            try:
+                data = packet.asbytes
+                broadcast_socket.bind((str(self.conf.dhcp_server_ip), 67))
+                broadcast_socket.sendto(data, ('255.255.255.255', 68))
+                broadcast_socket.sendto(data, (str(self.conf.network.broadcast_address), 68))
+            except Exception as e:
+                logger.exception(e)
+                logger.error(f"Failed to broadcast from {self.conf.dhcp_server_ip}: {e}")
 
     def _worker(self, timeout=0):
         try:
@@ -119,8 +158,8 @@ class DHCPServer:
             except OSError:  # An operation was attempted on something that is not a socket
                 pass
             else:
-                logger.info(f"{'received:':<19}{DHCPMessages[packet.options.by_code(53).value].name:<12}; "
-                            f"{packet.op}; MAC: {packet.chaddr}")
+                logger.info(f"{'received:':<14}{packet.options.by_code(53).value['dhcp_message_type']:<12}; "
+                            f"{'cli -> srv' if packet.op == 'BOOTREQUEST' else 'srv -> cli'}; MAC: {packet.chaddr}")
                 self.transactions[packet.xid].receive(packet)
         for transaction_id, transaction in list(self.transactions.items()):
             if transaction.is_done():
@@ -141,8 +180,12 @@ class DHCPServer:
 
     def stop(self, *_, **__):
         self.closed = True
+        self.hosts.run = False
         time.sleep(1)
         self.socket.close()
+        self.hosts.flush()
+        if self.hosts.t:
+            self.hosts.t.join()
         for transaction in list(self.transactions.values()):
             transaction.close()
         logger.success("Closed")

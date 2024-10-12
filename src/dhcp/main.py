@@ -30,12 +30,13 @@ def init_program():
         print(f"{__title__} v{__version__} ({__build__})")
         sys.exit(0)
     base_config = {
-      "network": "10.47.0.0/24",
-      "dhcp_range": ["10.47.0.1", "10.47.0.2"],
-      "router": "10.47.0.1",
-      "lease_time": 300,
-      "domain_name_servers": ["10.47.0.1"],
-      "data_file": "data.json"
+        "network": "10.47.0.0/24",
+        "dhcp_range": ["10.47.0.2", "10.47.0.255"],
+        "router": "10.47.0.1",
+        "domain": "localnet",
+        "lease_time": 300,
+        "domain_name_servers": ["10.47.0.1"],
+        "data_file": "data.json"
     }
     config_file = "config.json"
     if platform.system() == "Linux":

@@ -7,7 +7,7 @@ import subprocess
 from dataclasses import dataclass, field
 from loguru import logger
 
-from dhcppython.options import options
+from dhcppython import options
 
 
 def get_range(network):
@@ -59,9 +59,10 @@ class DHCPServerConfiguration:
     network: ipaddress.IPv4Network = ipaddress.ip_network('10.47.0.0/24')
     dhcp_range: tuple[int, int] = field(default_factory=lambda: (170852353, 170852606))  # 10.47.0.1, 10.47.0.254
     router: str = field(default_factory=lambda: '10.47.0.1')
+    domain: str = field(default_factory=lambda: 'localnet')
     lease_time: int = 300
     domain_name_servers: set = field(default_factory=lambda: set('10.47.0.1'))
-    dhcp_servers: set = field(default_factory=lambda: set())
+    dhcp_server_ip: ipaddress.IPv4Address = field(default_factory=lambda: None)
     data_file: str = 'hosts.json'
 
     @property
@@ -70,10 +71,11 @@ class DHCPServerConfiguration:
 
     def check(self):
         """Check if the configuration is valid"""
-        if len(self.dhcp_servers) == 0:
+        if self.dhcp_server_ip is None:
             logger.error("No valid IPs on any interface (maybe not in DHCP network?)")
             logger.info(f"{get_all_interfaces()}")
             exit(1)
+        logger.success(f"Using interface with '{self.dhcp_server_ip}' for DHCP Server.")
         s, e = ipaddress.IPv4Address(self.dhcp_range[0]), ipaddress.IPv4Address(self.dhcp_range[1])
         if s not in self.network or e not in self.network:
             logger.error(f"Bad DHCP range: '{s}'-'{e}' not in network")
@@ -104,8 +106,10 @@ class DHCPServerConfiguration:
                 data['dhcp_range'] = (int(s), int(e))
             else:
                 data['dhcp_range'] = get_range(data['network'])
-            if not data.get('dhcp_servers'):
-                data['dhcp_servers'] = set(i for i in get_all_interfaces() if ipaddress.IPv4Address(i) in data['network'])
+            if not data.get('dhcp_server_ip'):
+                i = set(i for i in get_all_interfaces() if ipaddress.IPv4Address(i) in data['network'])
+                if len(i) > 0:
+                    data['dhcp_server_ip'] = ipaddress.IPv4Address(i.pop())
             data['domain_name_servers'] = set(data['domain_name_servers'])
             conf = cls(**data)
             conf.check()
@@ -120,12 +124,15 @@ class DHCPServerConfiguration:
         """Return the options for the configuration"""
         return options.OptionList(
             [
-                options.SubnetMask(self.network.netmask),
-                options.Router(self.router),
-                options.DomainNameServer(*self.domain_name_servers),
-                options.LeaseTime(self.lease_time),
-                options.ServerIdentifier(self.dhcp_servers.pop()),
-                options.DHCPServerIdentifier(self.dhcp_servers.pop())
+                options.options.short_value_to_object(1, str(self.network.netmask)),
+                options.options.short_value_to_object(3, [str(self.router)]),
+                options.options.short_value_to_object(6, self.domain_name_servers),
+                options.options.short_value_to_object(15, self.domain),
+                options.options.short_value_to_object(28, self.network.broadcast_address),
+                options.options.short_value_to_object(51, self.lease_time),
+                options.options.short_value_to_object(54, self.dhcp_server_ip),
+                options.options.short_value_to_object(58, int(self.lease_time*0.5)),
+                options.options.short_value_to_object(59, int(self.lease_time*0.875)),
             ]
         )
 
