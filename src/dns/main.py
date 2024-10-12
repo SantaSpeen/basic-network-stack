@@ -94,10 +94,37 @@ dns_server.add_spoof("jetbrains.com.")
 # Spoofing 2ip
 dns_server.add_spoof("2ip.ru.", "2ip.io.")
 
+
+# Spoofing discord
+discord_list = (
+    "discord-attachments-uploads-prd.storage.googleapis.com",
+    "dis.gd",
+    "discord.co",
+    "discord.com",
+    "discord.design",
+    "discord.dev",
+    "discord.gg",
+    "discord.gift",
+    "discord.gifts",
+    "discord.media",
+    "discord.new",
+    "discord.store",
+    "discord.tools",
+    "discord.media",
+    "discordapp.com",
+    "discordapp.net",
+    "discordmerch.com",
+    "discordpartygames.com",
+    "discord-activities.com",
+    "discordactivities.com",
+    "discordsays.com",
+    "discordstatus.com"
+)
+dns_server.add_spoof(*discord_list)
+
 _added = []
 _hosts = {}
 interface = "wg0stg5"
-
 
 def _callback(ip, domain):
     if ip in _added:
@@ -105,7 +132,7 @@ def _callback(ip, domain):
     _added.append(ip)
     if system != "Linux":
         _hosts[domain] = ip
-        with open("hosts.json", "w") as f:
+        with open("data.json", "w") as f:
             json.dump(_hosts, f, indent=4)
         logger.success(f"Saved {domain!r} with {ip!r} to file.")
         return
