@@ -22,6 +22,7 @@ class DNSCache:
         self.cache = {}
         self.spoof_list = []
         self.spoof_callbacks = []
+        self.tick_callbacks = []
         self.worker = threading.Thread(target=self._worker, daemon=True)
         self.worker.start()
 
@@ -67,6 +68,7 @@ class DNSCache:
         while self.run:
             try:
                 self._sleep(10)
+                [callback() for callback in self.tick_callbacks]
                 current_time = time.time()
                 keys_to_delete = [key for key, (rr, expiry) in self.cache.items() if expiry < current_time]
                 for key in keys_to_delete:

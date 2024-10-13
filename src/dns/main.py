@@ -5,6 +5,7 @@ import subprocess
 import sys
 import time
 from collections import defaultdict
+from datetime import datetime
 
 from loguru import logger
 
@@ -12,13 +13,21 @@ from doh import DNSOverHTTPS
 from sevrer import DNSServer, Zone, Record, SOA, PTRZone
 
 logger.remove()
-logger.add(sys.stdout, level="INFO", backtrace=False, diagnose=False, enqueue=True,
-           format="\r<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | {message}")
 system = platform.system()
 if system == "Linux":
-    os.makedirs("/var/log/bns/dns/", exist_ok=True)
+    logger.add(sys.stdout, level="INFO", backtrace=False, diagnose=False, enqueue=True, colorize=False,
+               format="\r<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | {message}")
+    os.makedirs("/var/log/bns/", exist_ok=True)
     os.makedirs("/etc/bns/", exist_ok=True)
-    logger.add("/var/log/bns/dns/info.log", rotation="10 MB", retention="10 days", compression="zip")
+    log_path = "/var/log/bns/dns.log"
+    if os.path.exists(log_path):
+        creation_date = datetime.fromtimestamp(os.path.getctime(log_path)).strftime('%Y-%m-%d')
+        os.rename("/var/log/bns/dns.log", f"/var/log/bns/dns_{creation_date}.log")
+    logger.add(log_path, rotation="10 MB", retention="10 days", compression="zip")
+else:
+    logger.add(sys.stdout, level="INFO", backtrace=False, diagnose=False, enqueue=True,
+               format="\r<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | {message}")
+
 
 doh = DNSOverHTTPS("cloudflare")
 
@@ -125,26 +134,31 @@ discord_list = (
 )
 dns_server.add_spoof(*discord_list)
 
-_added = []
+_added = set()
 _hosts = defaultdict(lambda: [])
 interface = "wg0stg5"
+
+# restart interface (reset routes)
+if system == "Linux":
+    subprocess.run(f"ip link set {interface} down", shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    subprocess.run(f"ip link set {interface} up", shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 def _callback(ip, domain):
     if ip in _added:
         return
-    _added.append(ip)
-    if system != "Linux":
-        _hosts[domain].append(ip)
-        with open("data.json", "w") as f:
-            json.dump(_hosts, f, indent=4)
-        logger.success(f"Saved {domain!r} with {ip!r} to file.")
-        return
-    route_cmd = f"ip route add {ip} dev {interface}"
-    subprocess.run(route_cmd, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    logger.success(f"Added route for {ip};({domain}) via {interface}")
+    _added.add(ip)
+    if system == "Linux":
+        route_cmd = f"ip route add {ip} dev {interface}"
+        subprocess.run(route_cmd, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        logger.success(f"Added route for {ip};({domain}) via {interface}")
+    _hosts[domain].append(ip)
+
+def _tick_callback():
+    with open("data.json", "w") as f:
+        json.dump(_hosts, f, indent=4)
 
 dns_server.add_spoof_callback(_callback)
-
+dns_server.resolver.cache.tick_callbacks.append(_tick_callback)
 
 if __name__ == '__main__':
     try:

@@ -1,0 +1,15 @@
+[Unit]
+Description=[BNS] DNS Service
+After=network.target
+
+[Service]
+WorkingDirectory=/opt/bns/src/dns/
+ExecStart=/opt/bns/.venv/bin/python /opt/bns/src/dns/main.py
+StandardOutput=journal
+StandardError=journal
+Restart=always
+User=root
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
