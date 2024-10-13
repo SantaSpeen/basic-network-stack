@@ -15,8 +15,10 @@ from sevrer import DNSServer, Zone, Record, SOA, PTRZone
 logger.remove()
 system = platform.system()
 if system == "Linux":
-    logger.add(sys.stdout, level="INFO", backtrace=False, diagnose=False, enqueue=True, colorize=False,
-               format="\r<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | {message}")
+    logger.add(
+        sys.stdout, level=0, backtrace=False, diagnose=False,
+        enqueue=True, colorize=False, format="\r{level: <8} | {message}"
+    )
     os.makedirs("/var/log/bns/", exist_ok=True)
     os.makedirs("/etc/bns/", exist_ok=True)
     log_path = "/var/log/bns/dns.log"
