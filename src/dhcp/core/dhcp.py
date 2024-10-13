@@ -89,7 +89,7 @@ class Transaction:
             logger.error(f"Fail DORA: No host found; MAC: {packet.chaddr}")
             return self.send_nak(packet)
         req_ip = packet.options.by_code(50)
-        if not req_ip:
+        if req_ip:
             req_ip = req_ip.value.get('requested_ip_address')
             if host.ip != req_ip:
                 logger.error(f"Fail DORA: IP mismatched {host.ip=} != {req_ip=}; MAC: {packet.chaddr}")
