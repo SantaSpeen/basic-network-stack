@@ -111,7 +111,7 @@ class Transaction:
             packet.chaddr,
             int(time.time() - self.start),
             packet.xid,
-            '255.255.255.255'
+            packet.yiaddr
         )
         nack.siaddr = self.server.conf.dhcp_server_ip
         nack.options = options.OptionList([options.options.short_value_to_object(53, "DHCPNAK")])
