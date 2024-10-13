@@ -90,12 +90,10 @@ class Transaction:
             return self.send_nak(packet)
         req_ip = packet.options.by_code(50)
         if not req_ip:
-            logger.error(f"Fail DORA: No requested IP; MAC: {packet.chaddr}")
-            return self.send_nak(packet)
-        req_ip = req_ip.value.get('requested_ip_address')
-        if host.ip != req_ip:
-            logger.error(f"Fail DORA: IP mismatched {host.ip=} != {req_ip=}; MAC: {packet.chaddr}")
-            return self.send_nak(packet)
+            req_ip = req_ip.value.get('requested_ip_address')
+            if host.ip != req_ip:
+                logger.error(f"Fail DORA: IP mismatched {host.ip=} != {req_ip=}; MAC: {packet.chaddr}")
+                return self.send_nak(packet)
         ack = DHCPPacket.Ack(
             packet.chaddr,
             int(time.time() - self.start),
