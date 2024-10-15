@@ -158,7 +158,7 @@ def _tick_callback():
         json.dump(_hosts, f, indent=4)
 
 dns_server.add_spoof_callback(_callback)
-dns_server.resolver.cache.tick_callbacks.append(_tick_callback)
+dns_server.add_tick_callback(_tick_callback)
 
 if __name__ == '__main__':
     try:

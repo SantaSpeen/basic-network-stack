@@ -63,3 +63,6 @@ class DNSServer:
 
     def add_spoof_callback(self, callback):
         self.resolver.cache.spoof_callbacks.append(callback)
+
+    def add_tick_callback(self, callback):
+        self.resolver.cache.tick_callbacks.append(callback)
