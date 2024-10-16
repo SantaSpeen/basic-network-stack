@@ -163,6 +163,7 @@ cython_debug/
 
 data.json
 config.json
-config.yml
+state.json
 redis/
 spoof*
+src/bot/config/
