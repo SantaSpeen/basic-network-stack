@@ -37,7 +37,7 @@ if system == "Linux":
                     zipf.write(file, os.path.basename(file))
                     os.remove(file)
     logger.add(sys.stdout, level=0, backtrace=False, diagnose=False, enqueue=True, colorize=False, format="| {level: <8} | {message}")
-    logger.add(log_file, rotation="10 MB", retention="10 days", compression="zip")
+    logger.add(log_file, rotation="10 MB", retention="1 day")
     # Configurations
     os.makedirs("/etc/bns/dns_spoof", exist_ok=True)
 else:
