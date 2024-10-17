@@ -44,16 +44,18 @@ class DNSCache:
         ttl = rrs[0].ttl
         self.cache[domain_name] = (rrs, time.time() + ttl)
         for domain in self.spoof_list:
-            if domain in domain_name:
-                if rrs[0].rtype == 65:  # https
-                    for rr in rrs:
-                        ipv4_addresses = re.findall(ipv4_pattern, str(rr.rdata))
-                        if len(ipv4_addresses) > 0:
-                            logger.success(f"Spoofed HTTPS: '{domain_name}' '{rr.rdata}'")
-                        [callback(ip, domain_name) for callback in self.spoof_callbacks for ip in ipv4_addresses]
-                if rrs[0].rtype == 1:  # A
-                    logger.success(f"Spoofed: '{domain_name}' {_res}")
-                    [callback(r, domain_name) for callback in self.spoof_callbacks for r, _ in _res]
+            logger.debug(f"{domain!r} in {domain_name!r} is {domain in domain_name}")
+            if domain not in domain_name:
+                continue
+            if rrs[0].rtype == 65:  # https
+                for rr in rrs:
+                    ipv4_addresses = re.findall(ipv4_pattern, str(rr.rdata))
+                    if len(ipv4_addresses) > 0:
+                        logger.success(f"Spoofed HTTPS: '{domain_name}' '{rr.rdata}'")
+                    [callback(ip, domain_name) for callback in self.spoof_callbacks for ip in ipv4_addresses]
+            if rrs[0].rtype == 1:  # A
+                logger.success(f"Spoofed: '{domain_name}' {_res}")
+                [callback(r, domain_name) for callback in self.spoof_callbacks for r, _ in _res]
 
     def _sleep(self, t):
         i = 0
@@ -119,7 +121,7 @@ class ProxyResolver(LibProxyResolver):
                     if qtype == QTYPE.HTTPS:
                         rdata = rcls.fromZone(i.split(" ", maxsplit=2))
                     else:
-                        rdata=rcls(i)
+                        rdata = rcls(i)
                     rr = RR(request.q.qname, qtype, rdata=rdata, ttl=min_ttl)
                     rrs.append(rr)
                     reply.add_answer(rr)
@@ -165,5 +167,5 @@ class ProxyResolver(LibProxyResolver):
             logger.exception(e)
             return self._resolve_from_upstream(request, handler)
 
-    def find_zone(self, q) -> Any: ...
-
+    def find_zone(self, q) -> Any:
+        ...
