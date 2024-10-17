@@ -5,7 +5,7 @@
       <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/src/dhcp" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/src/dns" isTestSource="false" />
-      <sourceFolder url="file://$MODULE_DIR$/src/bot" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/src/manager" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/.venv" />
       <excludeFolder url="file://$MODULE_DIR$/venv" />
     </content>
