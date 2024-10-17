@@ -26,7 +26,7 @@ if system == "Linux":
         ftime = os.path.getmtime(log_file)
         index = 1
         while True:
-            zip_path = log_dir / f"{datetime.fromtimestamp(ftime).strftime('%Y-%m-%d')}-{index}.zip"
+            zip_path = log_dir / f"dns-{datetime.fromtimestamp(ftime).strftime('%Y-%m-%d')}-{index}.zip"
             if not os.path.exists(zip_path):
                 break
             index += 1
