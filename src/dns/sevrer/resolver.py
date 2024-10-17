@@ -44,9 +44,9 @@ class DNSCache:
         ttl = rrs[0].ttl
         self.cache[domain_name] = (rrs, time.time() + ttl)
         for domain in self.spoof_list:
-            # logger.debug(f"{domain!r} in {domain_name!r} is {domain in domain_name}")
             if domain not in domain_name:
                 continue
+            logger.debug(f"{domain!r} in {domain_name!r}")
             if rrs[0].rtype == 65:  # https
                 for rr in rrs:
                     ipv4_addresses = re.findall(ipv4_pattern, str(rr.rdata))
