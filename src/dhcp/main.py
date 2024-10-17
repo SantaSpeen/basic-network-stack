@@ -1,9 +1,11 @@
 import argparse
+import glob
 import json
 import os
 import platform
 import subprocess
 import sys
+import zipfile
 from datetime import datetime
 from pathlib import Path
 
@@ -13,16 +15,30 @@ from core import DHCPServer
 from core import DHCPServerConfiguration
 
 logger.remove()
-if platform.system() == "Linux":
-    logger.add(sys.stdout, level=0, backtrace=False, diagnose=False,
-               enqueue=True, colorize=False, format="| {level: <8} | {message}")
-    os.makedirs("/var/log/bns/", exist_ok=True)
+system = platform.system()
+if system == "Linux":
+    # Logging
+    log_dir = Path("/var/log/bns/")
+    log_file = log_dir / "dhcp.log"
+    os.makedirs(log_dir, exist_ok=True)
+    if os.path.exists(log_file):
+        ftime = os.path.getmtime(log_file)
+        index = 1
+        while True:
+            zip_path = log_dir / f"dhcp-{datetime.fromtimestamp(ftime).strftime('%Y-%m-%d')}-{index}.zip"
+            if not os.path.exists(zip_path):
+                break
+            index += 1
+        with zipfile.ZipFile(zip_path, "w") as zipf:
+            logs_files = glob.glob(f"{log_dir}/dhcp*.log")
+            for file in logs_files:
+                if os.path.exists(file):
+                    zipf.write(file, os.path.basename(file))
+                    os.remove(file)
+    logger.add(sys.stdout, level=0, backtrace=False, diagnose=False, enqueue=True, colorize=False, format="| {level: <8} | {message}")
+    logger.add(log_file, rotation="10 MB", retention="1 day")
+    # Configurations
     os.makedirs("/etc/bns/", exist_ok=True)
-    log_path = "/var/log/bns/dhcp.log"
-    if os.path.exists(log_path):
-        creation_date = datetime.fromtimestamp(os.path.getctime(log_path)).strftime('%Y-%m-%d')
-        os.rename("/var/log/bns/dhcp.log", f"/var/log/bns/dhcp_{creation_date}.log")
-    logger.add(log_path, rotation="10 MB", retention="10 days", compression="zip")
 else:
     logger.add(sys.stdout, level="INFO", backtrace=False, diagnose=False, enqueue=True,
                format="\r<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | {message}")
