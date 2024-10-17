@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import platform
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -28,15 +29,17 @@ else:
 
 
 __title__ = "BasicNetworkStack - DHCP Module"
-__version__ = "1.0.0"
-__build__ = "development"
+__version__ = "1.0.1"
+__build__ = "stable"
 
 parser = argparse.ArgumentParser(description=f'{__title__}')
 parser.add_argument('-v', '--version', action="store_true", help='Print version and exit.', default=False)
 parser.add_argument('-c', '--config', help='Configuration file', default=None)
+parser.add_argument('-m', '--masquerade', help='Interfaces for masquerade (ex: eth0,eth1)', default=None)
+args = parser.parse_args()
+
 
 def init_program():
-    args = parser.parse_args()
     if args.version:
         print(f"{__title__} v{__version__} ({__build__})")
         sys.exit(0)
@@ -59,13 +62,29 @@ def init_program():
         logger.info(f"Creating default configuration file: {config_file}")
         with open(config_file, "w") as f:
             json.dump(base_config, f, indent=4)
+
     return config_file
 
+def activate_masquerade(out_iface):
+    try:
+        # logger.info(f"Checking if masquerade is already active for '{out_iface}'")
+        check_nat_cmd = f"iptables-save | grep -q 'POSTROUTING.*-o {out_iface}.*MASQUERADE'"
+        nat_exists = subprocess.call(check_nat_cmd, shell=True) == 0
+        if not nat_exists:
+            logger.info(f"Activating masquerade for '{out_iface}'")
+            os.system(f"iptables -t nat -A POSTROUTING -o {out_iface} -j MASQUERADE")
+        else:
+            logger.info(f"Masquerade already active for '{out_iface}'")
+    except Exception as e:
+        logger.error(f"Error activating masquerade: {e}")
+
 def main():
-    logger.info("Hello")
+    logger.info("Starting DHCP Server")
     config_file = init_program()
     cfg = DHCPServerConfiguration.from_file(config_file)
     srv = DHCPServer(cfg)
+    if args.masquerade:
+        [activate_masquerade(inf) for inf in args.masquerade.split(",")]
     logger.info(srv)
     srv.start()
 
