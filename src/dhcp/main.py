@@ -28,7 +28,7 @@ else:
                format="\r<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | {message}")
 
 
-__title__ = "BasicNetworkStack - DHCP Module"
+__title__ = "[BNS] DHCP Service"
 __version__ = "1.0.1"
 __build__ = "stable"
 
@@ -79,7 +79,7 @@ def activate_masquerade(out_iface):
         logger.error(f"Error activating masquerade: {e}")
 
 def main():
-    logger.info("Starting DHCP Server")
+    logger.info(f"Starting {__title__} v{__version__} ({__build__})")
     config_file = init_program()
     cfg = DHCPServerConfiguration.from_file(config_file)
     srv = DHCPServer(cfg)
