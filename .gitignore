@@ -166,4 +166,4 @@ config.json
 state.json
 redis/
 spoof*
-src/bot/config/
+src/manager/config/
