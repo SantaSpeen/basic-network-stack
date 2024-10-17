@@ -90,7 +90,7 @@ def read_domains_from_files(directory):
             continue
         with open(file_path, 'r', encoding='utf-8') as f:
             file_domains = f.readlines()
-        domains.extend([domain.strip() for domain in file_domains])
+        domains.extend([domain.strip() for domain in file_domains if domain])
         logger.success(f"Read {len(file_domains)} domains from '{filename}'")
     logger.success(f"Read {len(domains)} domains in total.")
     return domains
