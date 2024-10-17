@@ -1,11 +1,14 @@
+import glob
 import json
 import os
 import platform
 import subprocess
 import sys
 import time
+import zipfile
 from collections import defaultdict
 from datetime import datetime
+from pathlib import Path
 
 from loguru import logger
 
@@ -15,15 +18,28 @@ from sevrer import DNSServer, Zone, Record, SOA, PTRZone
 logger.remove()
 system = platform.system()
 if system == "Linux":
-    logger.add(sys.stdout, level=0, backtrace=False, diagnose=False,
-               enqueue=True, colorize=False, format="| {level: <8} | {message}")
-    os.makedirs("/var/log/bns/", exist_ok=True)
-    os.makedirs("/etc/bns/", exist_ok=True)
-    log_path = "/var/log/bns/dns.log"
-    if os.path.exists(log_path):
-        creation_date = datetime.fromtimestamp(os.path.getctime(log_path)).strftime('%Y-%m-%d')
-        os.rename("/var/log/bns/dns.log", f"/var/log/bns/dns_{creation_date}.log")
-    logger.add(log_path, rotation="10 MB", retention="10 days", compression="zip")
+    # Logging
+    log_dir = Path("/var/log/bns/")
+    log_file = log_dir / "dns.log"
+    os.makedirs(log_dir, exist_ok=True)
+    if os.path.exists(log_file):
+        ftime = os.path.getmtime(log_file)
+        index = 1
+        while True:
+            zip_path = log_dir / f"{datetime.fromtimestamp(ftime).strftime('%Y-%m-%d')}-{index}.zip"
+            if not os.path.exists(zip_path):
+                break
+            index += 1
+        with zipfile.ZipFile(zip_path, "w") as zipf:
+            logs_files = glob.glob(f"{log_dir}/dns*.log")
+            for file in logs_files:
+                if os.path.exists(file):
+                    zipf.write(file, os.path.basename(file))
+                    os.remove(file)
+    logger.add(sys.stdout, level=0, backtrace=False, diagnose=False, enqueue=True, colorize=False, format="| {level: <8} | {message}")
+    logger.add(log_file, rotation="10 MB", retention="10 days", compression="zip")
+    # Configurations
+    os.makedirs("/etc/bns/dns_spoof", exist_ok=True)
 else:
     logger.add(sys.stdout, level="INFO", backtrace=False, diagnose=False, enqueue=True,
                format="\r<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | {message}")
@@ -61,78 +77,29 @@ dns_server = DNSServer(
      doh_provider=doh
 )
 
-# Spoofing youtube.com
-youtube_list = (
-    "youtube.com.",
-    "youtu.be.",
-    "yt.be.",
-    "googlevideo.com.",
-    "ytimg.com.",
-    "ggpht.com.",
-    "gvt1.com.",
-    "youtube-nocookie.com.",
-    "youtube-ui.l.google.com.",
-    "youtubeembeddedplayer.googleapis.com.",
-    "youtube.googleapis.com.",
-    "youtubei.googleapis.com.",
-    "yt-video-upload.l.google.com.",
-    "wide-youtube.l.google.com."
-)
-dns_server.add_spoof(*youtube_list)
 
-# Spoofing openai
-openai_list = (
-    "openai.com.",
-    "chatgpt.com.",
-    "oaistatic.com.",
-    "oaiusercontent.com."
-)
-dns_server.add_spoof(*openai_list)
-
-# Spoofing instagram (+ facebook)
-meta_list = (
-    "instagram.com.",
-    "cdninstagram.com.",
-    "facebook.com.",
-    "fbcdn.net."
-)
-dns_server.add_spoof(*meta_list)
-
-# Spoofing jetbrains
-dns_server.add_spoof("jetbrains.com.")
+def read_domains_from_files(directory):
+    logger.info("Reading domains for spoofing from files")
+    domains = []
+    for filename in os.listdir(directory):
+        file_path = os.path.join(directory, filename)
+        if not os.path.isfile(file_path):
+            continue
+        if not filename.endswith('.spoof'):
+            logger.warning(f"Skipping '{filename}'")
+            continue
+        with open(file_path, 'r', encoding='utf-8') as f:
+            file_domains = f.readlines()
+        domains.extend([domain.strip() for domain in file_domains])
+        logger.success(f"Read {len(file_domains)} domains from '{filename}'")
+    logger.success(f"Read {len(domains)} domains in total.")
+    return domains
 
 
-# Spoofing 2ip
-dns_server.add_spoof("2ip.ru.", "2ip.io.")
-
-
-# Spoofing discord
-discord_list = (
-    "discord-attachments-uploads-prd.storage.googleapis.com",
-    "dis.gd",
-    "discord.co",
-    "discord.com",
-    "discord.media",
-    "discord.design",
-    "discord.dev",
-    "discord.gg",
-    "discord.gift",
-    "discord.gifts",
-    "discord.new",
-    "discord.store",
-    "discord.tools",
-    "discord.media",
-    "discordapp.com",
-    "discordapp.net",
-    "discordmerch.com",
-    "discordpartygames.com",
-    "discord-activities.com",
-    "discordactivities.com",
-    "discordsays.com",
-    "discordstatus.com",
-    "discordcdn.com"
-)
-dns_server.add_spoof(*discord_list)
+spoof_dir = "-etc-bns-dns_spoof"
+if system == "Linux":
+    spoof_dir = "/etc/bns/dns_spoof"
+dns_server.add_spoof(*read_domains_from_files(spoof_dir))
 
 _added = set()
 _hosts = defaultdict(lambda: [])
