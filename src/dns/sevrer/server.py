@@ -9,10 +9,11 @@ from .zone import Zone, PTRZone
 
 
 class DNSServer:
-    def __init__(self, *zones: Zone, upstream="8.8.4.4", doh_provider: DNSOverHTTPS | None = None, port=53, tcp=True):
+    def __init__(self, *zones: Zone, upstream="8.8.4.4", doh_provider: DNSOverHTTPS | None = None, address="0.0.0.0", port=53, tcp=True):
         self.zones: list[Zone] = list(zones) or []
         self.zones.append(PTRZone("127.0.0").add("1", "localhost."))
         self.doh = doh_provider
+        self.address = address
         self.port = port
         self.tcp = tcp
         self.upstream = upstream
@@ -23,11 +24,11 @@ class DNSServer:
 
         dns_logger = DNSLogger(logf=logger.info)
         dns_logger.log_prefix = lambda handler: f'[{handler.__class__.__name__}:{handler.server.resolver.__class__.__name__}] '
-        self.udp_server: LibDNSServer = LibDNSServer(self.resolver, port=self.port, logger=dns_logger)
-        self.tcp_server: LibDNSServer = LibDNSServer(self.resolver, port=self.port, tcp=True, logger=dns_logger)
+        self.tcp_server: LibDNSServer = LibDNSServer(self.resolver, self.address, self.port, True, dns_logger)
+        self.udp_server: LibDNSServer = LibDNSServer(self.resolver, self.address, self.port, False, dns_logger)
 
     def start(self):
-        logger.info(f'Starting DNS server; port={self.port}, upstream={self.upstream!r}, doh={self.doh}')
+        logger.info(f'Starting DNS server; {self.address}:{self.port} (UDP{"+TPC" if self.tcp else " without TPC"}), upstream={self.upstream!r}, doh={self.doh}')
         self.udp_server.start_thread()
         if self.tcp:
             self.tcp_server.start_thread()

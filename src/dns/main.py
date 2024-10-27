@@ -45,6 +45,24 @@ else:
                format="\r<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | {message}")
 
 
+__title__ = "[BNS] DNS Service"
+__version__ = "1.0.2"
+__build__ = "stable"
+
+parser = argparse.ArgumentParser(description=f'{__title__}')
+parser.add_argument('-v', '--version', action="store_true", help='Print version and exit.', default=False)
+# parser.add_argument('-c', '--config', help='Configuration file', default=None)
+parser.add_argument('-d', '--vpn', help='Interface for VPN.', default=None)
+parser.add_argument('--address', help='DNS Server IP-Address.', default="0.0.0.0")
+parser.add_argument('--port', help='DNS Server Port.', default=53)
+parser.add_argument('--provider', help='DOH Provider for DNS Server.', default="cloudflare", choices=['cloudflare', 'opendns', 'quad9', 'google'])
+parser.add_argument('--no-tcp', action="store_true", help='Do not enable TCP mode.', default=False)
+args = parser.parse_args()
+if args.version:
+    print(f"{__title__} v{__version__} ({__build__})")
+    exit(0)
+logger.info(f"Starting {__title__} v{__version__} ({__build__})")
+
 doh = DNSOverHTTPS("cloudflare")
 
 # Home zone
@@ -74,7 +92,10 @@ home_ptr_168.add("11", "lako.home.")
 
 dns_server = DNSServer(
     home, home_ptr_47, home_ptr_41, home_ptr_168,
-     doh_provider=doh
+    doh_provider=doh,
+    address=args.address,
+    port=args.port,
+    tcp=not args.no_tcp,
 )
 
 
@@ -106,12 +127,24 @@ if system == "Linux":
     spoof_dir = "/etc/bns/dns_spoof"
 dns_server.add_spoof(*read_domains_from_files(spoof_dir))
 
+def get_linux_interfaces():
+    output = subprocess.check_output(["ip", "link"], encoding='utf-8')
+    interfaces = re.findall(r'^\d+: (\w+):', output, re.MULTILINE)
+    return interfaces
+
 _added = set()
 _hosts = defaultdict(lambda: [])
-interface = "wg0stg5"
+interface = args.vpn
 
 # restart interface (reset routes)
 if system == "Linux":
+    if not interface:
+        logger.error(f"Bad interface (use --vpn).")
+        exit(1)
+    if interface not in get_linux_interfaces():
+        logger.error(f"Interface not found: {interface}")
+        logger.info(f"Available: {get_linux_interfaces()}")
+        exit(1)
     subprocess.run(f"ip link set {interface} down", shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     subprocess.run(f"ip link set {interface} up", shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
