@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Literal, Any, overload
+from typing import Literal, Any
 
 from dnslib import QTYPE, dns, DNSLabel, RR
 from loguru import logger

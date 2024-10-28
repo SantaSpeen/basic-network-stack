@@ -9,7 +9,7 @@ from dnslib import QTYPE, DNSRecord, RCODE, RR
 from dnslib.proxy import ProxyResolver as LibProxyResolver
 from loguru import logger
 
-from doh import DNSQueryFailed
+from ..doh import DNSQueryFailed
 from .zone import TYPE_LOOKUP
 
 ipv4_pattern = r'(?:\b25[0-5]|\b2[0-4][0-9]|\b1[0-9]{2}|\b[1-9][0-9]|\b[0-9])(?:\.(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3}'
